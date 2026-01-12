@@ -460,7 +460,7 @@ namespace kawa
 				}()), ...);
 
 			return matched;
-		}s
+		}
 
 			template<typename T, typename...Args>
 		T& refresh(Args&&...args)
