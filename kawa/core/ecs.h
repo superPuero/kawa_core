@@ -5,6 +5,7 @@
 #include "macros.h"
 #include "fast_map.h"
 #include "task_manager.h"
+#include "stable_tuple.h"
 
 namespace kawa
 {

@@ -72,13 +72,13 @@ namespace kawa
 		stable_tuple() noexcept = default;
 
 		template<typename head_arg_t>
-		stable_tuple(head_arg_t&& head_arg) noexcept
+		constexpr stable_tuple(head_arg_t&& head_arg) noexcept
 			: head(std::forward<head_arg_t>(head_arg))
 		{
 		}
 
 		template<usize i>
-		auto& get() noexcept
+		constexpr auto& get() noexcept
 		{
 			if constexpr (i == 0)
 			{
@@ -91,7 +91,7 @@ namespace kawa
 		}
 
 		template<usize i>
-		const auto& get() const noexcept
+		constexpr const auto& get() const noexcept
 		{
 			if constexpr (i == 0)
 			{
@@ -141,10 +141,10 @@ namespace kawa
 
 		constexpr static auto index_sequence = std::make_index_sequence<size>{};
 
-		stable_tuple() noexcept = default;
+		constexpr stable_tuple() noexcept = default;
 
 		template<typename head_arg_t, typename...rest_args_t>
-		stable_tuple(head_arg_t&& head_arg, rest_args_t&&...rest_args) noexcept
+		constexpr stable_tuple(head_arg_t&& head_arg, rest_args_t&&...rest_args) noexcept
 			: head(std::forward<head_arg_t>(head_arg))
 			, rest(std::forward<rest_args_t>(rest_args)...)
 		{
@@ -152,7 +152,7 @@ namespace kawa
 		}
 
 		template<usize i>
-		auto& get() noexcept
+		constexpr auto& get() noexcept
 		{
 			if constexpr (i == 0)
 			{
@@ -165,7 +165,7 @@ namespace kawa
 		}
 
 		template<usize i>
-		const auto& get() const noexcept
+		constexpr const auto& get() const noexcept
 		{
 			if constexpr (i == 0)
 			{
@@ -187,11 +187,12 @@ namespace kawa
 		template<typename for_each_fn_t>
 		constexpr void for_each(for_each_fn_t&& fn) const noexcept
 		{
+			std::decay_t<int[]>
 			fn(head);
 			rest.for_each(std::forward<for_each_fn_t>(fn));
 		}
 
-		const void* data() const noexcept
+		constexpr const void* data() const noexcept
 		{
 			return &head;
 		}
