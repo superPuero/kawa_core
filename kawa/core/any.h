@@ -351,6 +351,8 @@ namespace kawa
 				{
 					_vtable.move_ctor(other._storage, _storage);
 				}
+				other._vtable.release();
+				other.release();
 			}
 
 			return *this;
