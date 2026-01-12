@@ -193,11 +193,19 @@ namespace kawa
 				{
 					if (matched) return;
 
-					using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
-
-					if (auto v = try_unwrap<expected_t>())
+					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
 					{
-						funcs(*v);
+						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+
+						if (auto v = try_unwrap<expected_t>())
+						{
+							funcs(*v);
+							matched = true;
+						}
+					}
+					else
+					{
+						funcs();
 						matched = true;
 					}
 				}()), ...);
