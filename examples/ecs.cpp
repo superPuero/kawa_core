@@ -1,4 +1,4 @@
-// ===== kawa::ecs Usage & API Documentation =====
+// ===== kawa::core::ecs Usage & API Documentation =====
 
 #include "../kawa/core/ecs.h"
 #include<source_location>
