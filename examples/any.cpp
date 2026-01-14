@@ -16,11 +16,15 @@ struct foo
 
 int main()
 {
-	sized_any<64> any(any_construct_tag<foo>{}, 42); // stack allocated, can store value of type up to the provided size
+	sized_any<32> x;// stack allocated, can store value of type up to the provided size
+	x.refresh<i32>(42); // initialization can be delayed
+
+	sized_any<64> any(any_construct_tag<foo>{}, 42); // any_contstruct_tag<T> can be used to do construction of internal value on the spot
 	unsized_any uany(any_construct_tag<std::string>{}, "foo"); // exactly the same api as sized_any but does not have size requirement and is potentially heap allocated 
 
-	auto optional = any.try_unwrap<f32>();
-	kw_info("im{}f32", optional ? " " : " not ");
+	auto optional = any.try_unwrap<f32>(); // will return nullptr if internal value is not the same as provided T
+
+	kw_info("im{}f32", any.is<f32>() ? " " : " not ");
 
 	kw_info("foo::value: {}", any.unwrap<foo>().value); // will assert in debug if type is wrong
 
