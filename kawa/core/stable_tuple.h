@@ -160,7 +160,7 @@ namespace kawa
 			}
 			else
 			{
-				return rest.get<i - 1>();
+				return rest.template get<i - 1>();
 			}
 		}
 
@@ -173,7 +173,7 @@ namespace kawa
 			}
 			else
 			{
-				return rest.get<i - 1>();
+				return rest.template get<i - 1>();
 			}
 		}
 
@@ -187,7 +187,6 @@ namespace kawa
 		template<typename for_each_fn_t>
 		constexpr void for_each(for_each_fn_t&& fn) const noexcept
 		{
-			std::decay_t<int[]>
 			fn(head);
 			rest.for_each(std::forward<for_each_fn_t>(fn));
 		}

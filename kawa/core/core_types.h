@@ -11,11 +11,13 @@
 #include <unordered_map>
 #include <future>
 #include <atomic>
+#include <mutex>
 #include <thread>
 #include <string_view>
 #include <new>
 #include <ranges>
 #include <type_traits>
+#include <source_location>
 
 #include "macros.h"
 
@@ -69,8 +71,10 @@ namespace kawa
 
 	template<typename T, usize size>
 	using array = std::array<T, size>;
-
+	
 	using thread = std::thread;
+
+	using mutex = std::mutex;
 
 	template<typename T>
 	using unique = std::unique_ptr<T>;

@@ -36,7 +36,7 @@ namespace kawa
 
 	struct component_info
 	{
-		meta::type_info type_info;
+		type_info type_info;
 		void* value_ptr;
 	};
 
@@ -59,9 +59,9 @@ namespace kawa
 		template<typename Fn, typename...Args>
 		void refresh(Args&&...args)
 		{
-			static_assert(std::is_same_v<typename meta::function_traits<Fn>::template arg_at<0>, entity_id>, "lifetime hook callbacks require first parameter to be entity id");
+			static_assert(std::is_same_v<typename function_traits<Fn>::template arg_at<0>, entity_id>, "lifetime hook callbacks require first parameter to be entity id");
 
-			using T = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<1>>;
+			using T = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<1>>;
 
 			_storage.refresh<Fn>(std::forward<Args>(args)...);
 			invoker = +[](unsized_any& fn, usize e, void* comp)
@@ -93,7 +93,7 @@ namespace kawa
 		_opaque_callback_wrap on_destruct_callback;
 
 		template<typename T>
-		component_storage(meta::construct_tag<T>, usize capacity)
+		component_storage(construct_tag<T>, usize capacity)
 		{
 			refresh<T>(capacity);
 		}
@@ -302,7 +302,7 @@ namespace kawa
 		template<typename T>
 		T& get(usize index) noexcept
 		{
-			kw_assert_msg(_vtable.type_info.is<T>(), "got: {} expected: {}", meta::type_name<T>(), _vtable.type_info.name);
+			kw_assert_msg(_vtable.type_info.is<T>(), "got: {} expected: {}", type_name<T>(), _vtable.type_info.name);
 			kw_assert(index < _capacity);
 			kw_assert(_mask[index]);
 
@@ -606,11 +606,11 @@ namespace kawa
 		template<typename Fn>
 		struct query_traits
 		{
-			using dirty_args = meta::function_traits<Fn>::args_tuple;
-			using clear_args = meta::transform_each_t<std::remove_cvref_t, meta::transform_each_t<std::remove_pointer_t, dirty_args>>;
+			using dirty_args = function_traits<Fn>::args_tuple;
+			using clear_args = transform_each_t<std::remove_cvref_t, transform_each_t<std::remove_pointer_t, dirty_args>>;
 
-			using require_args = meta::filter_tuple_t<_not_entity_id, meta::filter_tuple_t<is_required_arg, dirty_args>>;
-			using clean_require_args = meta::transform_each_t<std::remove_cvref_t, require_args>;
+			using require_args = filter_tuple_t<_not_entity_id, filter_tuple_t<is_required_arg, dirty_args>>;
+			using clean_require_args = transform_each_t<std::remove_cvref_t, require_args>;
 
 			constexpr static bool has_required_components = std::tuple_size_v<clean_require_args> > 0;
 		};
@@ -1068,9 +1068,9 @@ namespace kawa
 		template<typename Fn>
 		void on_construct(Fn&& func)
 		{
-			static_assert(std::is_same_v<typename meta::function_traits<Fn>::template arg_at<0>, entity_id>, "lifetime hook callbacks require first parameter to be entity id");
+			static_assert(std::is_same_v<typename function_traits<Fn>::template arg_at<0>, entity_id>, "lifetime hook callbacks require first parameter to be entity id");
 
-			using T = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<1>>;
+			using T = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<1>>;
 
 			_lazy_get_storage<T>().set_on_construct<Fn>(std::forward<Fn>(func));
 		}
@@ -1078,9 +1078,9 @@ namespace kawa
 		template<typename Fn>
 		void on_destruct(Fn&& func)
 		{
-			static_assert(std::is_same_v<typename meta::function_traits<Fn>::template arg_at<0>, entity_id>, "lifetime hook callbacks require first parameter to be entity id");
+			static_assert(std::is_same_v<typename function_traits<Fn>::template arg_at<0>, entity_id>, "lifetime hook callbacks require first parameter to be entity id");
 
-			using T = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<1>>;
+			using T = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<1>>;
 
 			_lazy_get_storage<T>().set_on_destruct<Fn>(std::forward<Fn>(func));
 		}
@@ -1183,7 +1183,7 @@ namespace kawa
 		template<typename T>
 		component_storage&_lazy_get_storage() noexcept
 		{
-			constexpr auto hash = meta::type_hash<T>();
+			constexpr auto hash = type_hash<T>();
 
 			if (auto v = _storages.try_get(hash))
 			{
@@ -1191,7 +1191,7 @@ namespace kawa
 			}
 			else
 			{
-				return _storages.insert(hash, meta::construct_tag<T>{}, _cfg.max_entity_count);
+				return _storages.insert(hash, construct_tag<T>{}, _cfg.max_entity_count);
 			}
 		}		
 

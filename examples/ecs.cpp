@@ -1,11 +1,11 @@
 // ===== kawa::ecs Usage & API Documentation =====
 
 #include "../kawa/core/ecs.h"
+#include<source_location>
 
 #include <iostream>
 #include <string>
 #include <vector>
-
 
 // === User-defined components ===
 struct Position { float x, y; };
@@ -39,16 +39,23 @@ struct foo
     int number = 42;
 };
 
+template<typename T>
+void fn()
+{
+    kw_info("{}", std::source_location::current().function_name());
+}
+
 int main()
 {
     using namespace kawa;
+
+    fn<foo>();
 
     registry reg
     ({
         .name = "demo",           
         .max_entity_count = 4096,   
         .max_component_count = 32,  
-
     });
 
     kawa::task_manager tm(16); // required for parallel queries

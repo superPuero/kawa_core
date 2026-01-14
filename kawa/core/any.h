@@ -7,7 +7,6 @@
 
 namespace kawa
 {
-
 	struct lifetime_vtable
 	{
 		using deleter_fn_t = void(void*);
@@ -19,7 +18,7 @@ namespace kawa
 		dtor_fn_t* dtor_fn = nullptr;
 		copy_ctor_fn_t* copy_ctor_fn = nullptr;
 		move_ctor_fn_t* move_ctor_fn = nullptr;
-		meta::type_info type_info;
+		type_info type_info;
 
 		void release()
 		{
@@ -193,9 +192,9 @@ namespace kawa
 				{
 					if (matched) return;
 
-					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -222,9 +221,9 @@ namespace kawa
 					if (matched) return;
 
 
-					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -250,9 +249,9 @@ namespace kawa
 
 			(([&]()
 				{
-					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -412,9 +411,9 @@ namespace kawa
 				{
 					if (matched) return;
 
-					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -440,9 +439,9 @@ namespace kawa
 				{
 					if (matched) return;
 
-					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -467,9 +466,9 @@ namespace kawa
 
 			(([&]()
 				{
-					if constexpr (std::tuple_size_v<typename meta::function_traits<Fn>::args_tuple>)
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename meta::function_traits<Fn>::template arg_at<0>>;
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{

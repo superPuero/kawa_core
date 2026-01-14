@@ -12,8 +12,17 @@ namespace kawa
     struct static_string
     {
         char value[N];
+        usize len = N;
+
+        consteval static_string() = default;
+
 
         consteval static_string(const char(&str)[N])
+        {
+            std::copy_n(str, N, value);
+        }
+
+        consteval static_string(const char* str)
         {
             std::copy_n(str, N, value);
         }
