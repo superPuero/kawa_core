@@ -33,23 +33,9 @@ auto update_movement_factory(float dt)
         };
 }
 
-struct foo
-{
-    std::string name = "unnamed";
-    int number = 42;
-};
-
-template<typename T>
-void fn()
-{
-    kw_info("{}", std::source_location::current().function_name());
-}
-
 int main()
 {
     using namespace kawa;
-
-    fn<foo>();
 
     registry reg
     ({
