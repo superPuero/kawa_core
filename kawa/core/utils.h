@@ -6,8 +6,55 @@
 
 #include <fstream>
 
+#define kw_fwd(...) static_cast<decltype(__VA_ARGS__)&&>(__VA_ARGS__)
+#define kw_alias(alias, type) using alias = ::kawa::strong_alias<type, #alias>
+
 namespace kawa
-{     
+{
+    struct ansi_codes
+    {
+        enum class text_color
+        {
+            default_ = 39,
+            black = 30,
+            red = 31,
+            green = 32,
+            yellow = 33,
+            blue = 34,
+            magenta = 35,
+            cyan = 36,
+            white = 37,
+        };
+        enum class background_color
+        {
+            default_ = 49,
+            black = 40,
+            red = 41,
+            green = 42,
+            yellow = 43,
+            blue = 44,
+            magenta = 45,
+            cyan = 46,
+            white = 47,
+        };
+    };
+
+
+    struct into_any
+    {
+        template<typename T>
+        operator T& () noexcept
+        {
+            return _::fake_object<T>;
+        }
+
+        template<typename T>
+        operator T&& () noexcept
+        {
+            return _::fake_object<T>;
+        }
+    };
+
     template <usize N>
     struct static_string
     {
@@ -16,13 +63,7 @@ namespace kawa
 
         consteval static_string() = default;
 
-
         consteval static_string(const char(&str)[N])
-        {
-            std::copy_n(str, N, value);
-        }
-
-        consteval static_string(const char* str)
         {
             std::copy_n(str, N, value);
         }
@@ -74,5 +115,31 @@ namespace kawa
 
     template <typename T>
     usize dyn_array_byte_size(const dyn_array<T>& arr) noexcept { return arr.size() * sizeof(T); }
+
+    template<typename T, static_string alias_tag_>
+    struct strong_alias
+    {
+        T* operator->() noexcept
+        {
+            return &value;
+        }
+
+        const T* operator->() const noexcept
+        {
+            return &value;
+        }
+
+        T& operator*() noexcept
+        {
+            return value;
+        }
+
+        const T& operator*() const noexcept
+        {
+            return value;
+        }
+
+        T value;
+    };
 }
 #endif // !KAWA_UTILS

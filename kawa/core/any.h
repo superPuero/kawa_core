@@ -117,12 +117,29 @@ namespace kawa
 	class sized_any
 	{
 	public:
+		template<typename value_t, typename...args_t>
+		static sized_any create(args_t&&...args) noexcept
+		{
+			return sized_any(any_construct_tag< value_t>{}, kw_fwd(args)...);
+		}
 
+		template<typename value_t>
+		static sized_any make(const value_t& arg) noexcept
+		{
+			return sized_any(any_construct_tag<value_t>{}, arg);
+		}
+
+		template<typename value_t>
+		static sized_any make(value_t&& arg) noexcept
+		{
+			return sized_any(any_construct_tag<value_t>{}, kw_fwd(arg));
+		}
+		
 		sized_any() = default;
 
 		template<typename T, typename...Args>
 			requires (sizeof(T) <= storage_size)
-		sized_any(any_construct_tag<T>, Args&&...args)
+		sized_any(any_construct_tag<T>, Args&&...args) noexcept
 		{
 			refresh<T>(std::forward<Args>(args)...);
 		}
@@ -170,12 +187,12 @@ namespace kawa
 			return *this;
 		}
 
-		~sized_any()
+		~sized_any() noexcept
 		{
 			release();
 		}
 
-		void release()
+		void release() noexcept
 		{
 			if (_vtable.type_info)
 			{
@@ -185,7 +202,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		bool try_match(Fn&&...funcs)
+		bool try_match(Fn&&...funcs) noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -213,7 +230,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		bool try_match(Fn&&...funcs) const
+		bool try_match(Fn&&...funcs) const noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -222,9 +239,11 @@ namespace kawa
 
 					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
+						using raw_args_t = typename function_traits<Fn>::template arg_at<0>;
+						using u_args_t = std::remove_reference_t<raw_args_t>;
+						static_assert(std::is_const_v<u_args_t>);
 
-						static_assert(std::is_const_v<expected_t>);
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -243,7 +262,42 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		void ensure_match(Fn&&...funcs)
+		void ensure_match(Fn&&...funcs) noexcept
+		{
+			bool matched = false;
+			(([&]()
+				{
+					if (matched) return;
+
+
+					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
+					{
+						using raw_args_t = typename function_traits<Fn>::template arg_at<0>;
+						using u_args_t = std::remove_reference_t<raw_args_t>;
+						static_assert(std::is_const_v<u_args_t>);
+
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
+
+						if (auto v = try_unwrap<expected_t>())
+						{
+							funcs(*v);
+							matched = true;
+						}
+					}
+					else
+					{
+						funcs();
+						matched = true;
+					}
+
+				}()), ...);
+
+			kw_assert_msg(matched, "wasnt able to match");
+		}
+
+
+		template<typename...Fn>
+		void ensure_match(Fn&&...funcs) const noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -272,42 +326,8 @@ namespace kawa
 			kw_assert_msg(matched, "wasnt able to match");
 		}
 
-
 		template<typename...Fn>
-		void ensure_match(Fn&&...funcs) const
-		{
-			bool matched = false;
-			(([&]()
-				{
-					if (matched) return;
-
-
-					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
-					{
-						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
-
-						static_assert(std::is_const_v<expected_t>);
-
-
-						if (auto v = try_unwrap<expected_t>())
-						{
-							funcs(*v);
-							matched = true;
-						}
-					}
-					else
-					{
-						funcs();
-						matched = true;
-					}
-
-				}()), ...);
-
-			kw_assert_msg(matched, "wasnt able to match");
-		}
-
-		template<typename...Fn>
-		bool try_poly_match(Fn&&...funcs)
+		bool try_poly_match(Fn&&...funcs) noexcept
 		{
 			bool matched = false;
 
@@ -335,7 +355,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		bool try_poly_match(Fn&&...funcs) const
+		bool try_poly_match(Fn&&...funcs) const noexcept
 		{
 			bool matched = false;
 
@@ -343,9 +363,12 @@ namespace kawa
 				{
 					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
-						static_assert(std::is_const_v<expected_t>);
+						using raw_args_t = typename function_traits<Fn>::template arg_at<0>;
+						using u_args_t = std::remove_reference_t<raw_args_t>;
+						static_assert(std::is_const_v<u_args_t>);
+
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -367,7 +390,7 @@ namespace kawa
 
 		template<typename T, typename...Args>
 			requires (sizeof(T) <= storage_size)
-		T& refresh(Args&&...args)
+		T& refresh(Args&&...args) noexcept
 		{
 			release();
 
@@ -436,15 +459,15 @@ namespace kawa
 	{
 	public:
 
-		unsized_any() = default;
+		unsized_any() noexcept = default;
 
 		template<typename T, typename...Args>
-		unsized_any(any_construct_tag<T>, Args&&...args)
+		unsized_any(any_construct_tag<T>, Args&&...args) noexcept
 		{
 			refresh<T>(std::forward<Args>(args)...);
 		}
 
-		unsized_any& operator=(unsized_any&& other)
+		unsized_any& operator=(unsized_any&& other) noexcept
 		{
 			if (this != &other)
 			{
@@ -465,7 +488,7 @@ namespace kawa
 			*this = std::move(other);
 		}
 
-		unsized_any& operator=(const unsized_any& other)
+		unsized_any& operator=(const unsized_any& other) noexcept
 		{
 			if (this != &other)
 			{
@@ -484,12 +507,12 @@ namespace kawa
 			*this = other;
 		}
 
-		~unsized_any()
+		~unsized_any() noexcept
 		{
 			release();
 		}
 
-		void release()
+		void release() noexcept
 		{
 			if (_storage)
 			{
@@ -499,7 +522,7 @@ namespace kawa
 		}
 
 			template<typename...Fn>
-		bool try_match(Fn&&...funcs)
+		bool try_match(Fn&&...funcs) noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -527,7 +550,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		bool try_match(Fn&&...funcs) const
+		bool try_match(Fn&&...funcs) const noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -536,9 +559,11 @@ namespace kawa
 
 					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
+						using raw_args_t = typename function_traits<Fn>::template arg_at<0>;
+						using u_args_t = std::remove_reference_t<raw_args_t>;
+						static_assert(std::is_const_v<u_args_t>);
 
-						static_assert(std::is_const_v<expected_t>);
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -557,7 +582,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		void ensure_match(Fn&&...funcs)
+		void ensure_match(Fn&&...funcs) noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -588,7 +613,7 @@ namespace kawa
 
 
 		template<typename...Fn>
-		void ensure_match(Fn&&...funcs) const
+		void ensure_match(Fn&&...funcs) const noexcept
 		{
 			bool matched = false;
 			(([&]()
@@ -598,10 +623,12 @@ namespace kawa
 
 					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
+
+						using raw_args_t = typename function_traits<Fn>::template arg_at<0>;
+						using u_args_t = std::remove_reference_t<raw_args_t>;
+						static_assert(std::is_const_v<u_args_t>);
+
 						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
-
-						static_assert(std::is_const_v<expected_t>);
-
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -621,7 +648,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		bool try_poly_match(Fn&&...funcs)
+		bool try_poly_match(Fn&&...funcs) noexcept
 		{
 			bool matched = false;
 
@@ -649,7 +676,7 @@ namespace kawa
 		}
 
 		template<typename...Fn>
-		bool try_poly_match(Fn&&...funcs) const
+		bool try_poly_match(Fn&&...funcs) const noexcept
 		{
 			bool matched = false;
 
@@ -657,9 +684,12 @@ namespace kawa
 				{
 					if constexpr (std::tuple_size_v<typename function_traits<Fn>::args_tuple>)
 					{
-						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
-						static_assert(std::is_const_v<expected_t>);
+						using raw_args_t = typename function_traits<Fn>::template arg_at<0>;
+						using u_args_t = std::remove_reference_t<raw_args_t>;
+						static_assert(std::is_const_v<u_args_t>);
+
+						using expected_t = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<0>>;
 
 						if (auto v = try_unwrap<expected_t>())
 						{
@@ -679,7 +709,7 @@ namespace kawa
 		}
 
 		template<typename T, typename...Args>
-		T& refresh(Args&&...args)
+		T& refresh(Args&&...args) noexcept
 		{
 			release();
 

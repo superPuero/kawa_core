@@ -27,7 +27,6 @@
 #define kw_debugbreak() std::terminate() 
 #endif
 
-
 #define kw_stringify(x) #x
 #define kw_expand_stringify(x) kw_stringify(x)
 
@@ -69,14 +68,11 @@ __VA_OPT__(kw_for_each_again kw_parens (macro, __VA_ARGS__))\
 
 #define kw_for_each_again() kw_for_each_helper
 
-#define kw_alias(name, type)\
-struct name \
-{ \
-	name(const type& v) : value(v) {};\
-	type value;\
-}
-
 #define kw_ansi_esc_sequence "\x1B"
+
+#define kw_ansi_fmt_block kw_ansi_esc_sequence"[{};{}m"
+
+#define kw_ansi_reset_fmt_block kw_ansi_esc_sequence"[39;49m"
 
 #define kw_ansi_color_black   30
 #define kw_ansi_color_red     31
@@ -198,5 +194,6 @@ kw_println(fmt, __VA_ARGS__)
 
 #define kw_debug_expand(x) ((void)0)
 #endif
+
 
 #endif

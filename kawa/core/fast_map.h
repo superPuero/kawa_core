@@ -62,6 +62,8 @@ namespace kawa
 			}
 
 			kw_assert_msg(false, "hash_map collision depth exceeded");
+
+			return values[0]; // to silent compiler warning
 		}
 
 		bool contains(u64 hash_key)

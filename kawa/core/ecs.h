@@ -21,6 +21,11 @@ namespace kawa
 			return val != invalid;
 		}
 
+		u64 as_u64() const noexcept
+		{
+			return val;
+		}
+
 		operator u64& () noexcept
 		{
 			return val;
@@ -388,7 +393,7 @@ namespace kawa
 
 	};
 
-	struct registry
+	struct registry 
 	{
 		struct defer_buffer
 		{
@@ -576,11 +581,11 @@ namespace kawa
 				id = _id_counter++;
 			}
 
-			kw_assert(id.is_valid());
-
-			_entries.emplace(id);
-
-			((emplace<Args>(id, std::forward<Args>(args))), ...);
+			if (id.is_valid())
+			{
+				_entries.emplace(id);
+				((emplace<Args>(id, std::forward<Args>(args))), ...);
+			}
 
 			return id;
 		}
@@ -615,7 +620,7 @@ namespace kawa
 			constexpr static bool has_required_components = std::tuple_size_v<clean_require_args> > 0;
 		};
 
-		template<typename Fn>
+		template<std::invocable<entity_id, component_info> Fn>
 		void query_info(Fn&& info_func)
 		{		
 			for (auto e : _entries.as_base())
@@ -630,7 +635,7 @@ namespace kawa
 			}
 		}
 
-		template<typename Fn>
+		template<std::invocable<component_info> Fn>
 		void query_info_with(entity_id e, Fn&& info_func)
 		{
 			for (auto& s : _storages.values)
@@ -1117,6 +1122,9 @@ namespace kawa
 
 		void clone(entity_id from, entity_id to)
 		{
+			if (!alive(from) || !alive(to))
+				return;
+
 			for (auto& s : _storages.values	)
 			{
 				if (s.contains(from))
@@ -1128,11 +1136,25 @@ namespace kawa
 
 		entity_id clone(entity_id from)
 		{
-			entity_id to = entity();
+			entity_id to;
 
-			clone(from, to);
+			if (alive(from))
+			{
+				to = entity();
+
+				if (to.is_valid())
+				{
+					clone(from, to);
+				}
+			}
 
 			return to;
+		}
+
+
+		bool alive(entity_id id) noexcept
+		{
+			return (id < _entries._capacity) && _entries.contains(id);
 		}
 
 		template<typename T>
@@ -1142,9 +1164,9 @@ namespace kawa
 		}
 
 		//template<typename...Args>
-		//tuple<Args&...> get(entity_id e)
+		//stable_tuple<Args&...> get(entity_id e)
 		//{
-		//	return std::forward_as_tuple(_lazy_get_storage<Args>().get<Args>(e)...);
+		//	return kawa::forward_as_tuple(_lazy_get_storage<Args>().template get<Args>(e)...);
 		//}
 
 		template<typename T>
@@ -1154,9 +1176,9 @@ namespace kawa
 		}
 
 		//template<typename...Args>
-		//tuple<Args*...> try_get(entity_id e)
+		//stable_tuple<Args*...> try_get(entity_id e)
 		//{
-		//	return std::forward_as_tuple(_lazy_get_storage<Args>().try_get<Args>(e)...);
+		//	return kawa::forward_as_tuple(_lazy_get_storage<Args>().template try_get<Args>(e)...);
 		//}
 
 		void destroy(entity_id id)
