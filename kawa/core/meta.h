@@ -219,6 +219,18 @@ namespace kawa
 
 	template<template <typename...> typename F, typename T>
 	using transform_each_t = typename transform_each<F, T>::type;
+
+	template <typename...types>
+	constexpr usize union_size = std::max({ sizeof(types)... });
+
+	template<typename...args_t>
+	constexpr bool any_of = false;
+
+	template<typename type, typename head_t>
+	constexpr bool any_of<type, head_t> = std::is_same_v<type, head_t>;
+
+	template<typename type, typename head_t, typename...args_t>
+	constexpr bool any_of<type, head_t, args_t...> = std::is_same_v<type, head_t> || any_of<type, args_t...>;
 }
 
 #endif KAWA_META

@@ -17,7 +17,7 @@ namespace kawa
 		atomic<u32> generation{ 0 };
 	};
 
-	struct task_handle 
+	struct task_handle
 	{
 		constexpr static u32 _invalid_worker = std::numeric_limits<u32>::max();
 		u32 worker = 0;
@@ -76,14 +76,14 @@ namespace kawa
 		{
 			switch (policy)
 			{
-			case kawa::task_schedule_policy::ensure:	
-				return _schedule_ensure(std::forward<task_fn>(task));
+			case kawa::task_schedule_policy::ensure:
+				return schedule_ensure(std::forward<task_fn>(task));
 				break;
 			case kawa::task_schedule_policy::wait_if_neccesary:
-				return _schedule_wait_if_necessary(std::forward<task_fn>(task));
+				return schedule_wait_if_necessary(std::forward<task_fn>(task));
 				break;
 			case kawa::task_schedule_policy::try_schedule:
-				return _schedule_try(std::forward<task_fn>(task));
+				return schedule_try(std::forward<task_fn>(task));
 				break;
 			default:
 				kw_panic();
@@ -91,7 +91,7 @@ namespace kawa
 			}
 		}
 
-		task_handle _schedule_try(task_fn&& task) noexcept
+		task_handle schedule_try(task_fn&& task) noexcept
 		{
 			for (u32 i = 0; i < _workers.size(); i++)
 			{
@@ -106,27 +106,27 @@ namespace kawa
 
 					w.semaphore.release();
 
-					return task_handle{ .worker = i, .generation = (gen + 1)};
+					return task_handle{ .worker = i, .generation = (gen + 1) };
 				}
 			}
 
 			return task_handle{ .worker = task_handle::_invalid_worker };
 		}
 
-		task_handle _schedule_ensure(task_fn&& task) noexcept
+		task_handle schedule_ensure(task_fn&& task) noexcept
 		{
-			auto th = _schedule_try(std::forward<task_fn>(task));
+			auto th = schedule_try(std::forward<task_fn>(task));
 			kw_assert(th.worker != task_handle::_invalid_worker);
 			return th;
 		}
 
-		task_handle _schedule_wait_if_necessary(task_fn&& task)
+		task_handle schedule_wait_if_necessary(task_fn&& task)
 		{
 			task_handle out;
 
 			while (true)
 			{
-				out = _schedule_try(std::forward<task_fn>(task));
+				out = schedule_try(std::forward<task_fn>(task));
 				if (out.worker != task_handle::_invalid_worker) return out;
 				std::this_thread::yield();
 			}
