@@ -858,6 +858,25 @@ namespace kawa
 			release();
 		}
 
+		template<typename value_t, typename...args_t>
+		static unsized_any create(args_t&&...args) noexcept
+		{
+			return unsized_any(any_construct_tag< value_t>{}, kw_fwd(args)...);
+		}
+
+		template<typename value_t>
+		static unsized_any make(const value_t& arg) noexcept
+		{
+			return unsized_any(any_construct_tag<value_t>{}, arg);
+		}
+
+		template<typename value_t>
+		static unsized_any make(value_t&& arg) noexcept
+		{
+			return unsized_any(any_construct_tag<value_t>{}, kw_fwd(arg));
+		}
+
+
 		void release() noexcept
 		{
 			if (_storage)
@@ -1090,7 +1109,7 @@ namespace kawa
 		}
 
 		template<typename T>
-		bool is() noexcept { return _vtable.type_info.is<T>(); }
+		bool is() const noexcept { return _vtable.type_info.is<T>(); }
 
 	private:
 		void* _storage = nullptr;

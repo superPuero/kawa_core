@@ -50,7 +50,7 @@ namespace kawa
 		{
 			usize passed = 0;
 			kw_println_colored(kw_ansi_color_cyan, kw_ansi_background_color_default, "#### <{}> test group summary ####", name);
-			kw_println("");
+			kw_println("", "");
 
 			for (auto& e : entries)
 			{
@@ -68,7 +68,7 @@ namespace kawa
 				}
 			}
 
-			kw_println("");
+			kw_println("", "");
 			kw_println_colored(kw_ansi_color_cyan, kw_ansi_background_color_default, "### {}/{} ({}%) passsed ###", passed, entries.size(), ((f32)passed / (f32)entries.size()) * 100);
 		}
 
@@ -91,7 +91,7 @@ namespace kawa
 		void summary()
 		{
 			kw_println_colored(kw_ansi_color_cyan, kw_ansi_background_color_default, "{} ", "#### test summary ####");
-			kw_println("");
+			kw_println("", "");
 
 			for (auto& g : groups)
 			{

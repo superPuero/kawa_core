@@ -13,118 +13,73 @@
 #undef kw_warn
 #undef kw_error
 
-#define kw_info(fmt, ...) kw_global_logging_broadcaster().emit(logging_message_t::make(::kawa::info(std::format(fmt, __VA_ARGS__))))
-#define kw_warn(fmt, ...) kw_global_logging_broadcaster().emit(logging_message_t::make(::kawa::warn(std::format(fmt, __VA_ARGS__))))
-#define kw_error(fmt, ...) kw_global_logging_broadcaster().emit(logging_message_t::make(::kawa::error(std::format(fmt, __VA_ARGS__))))
-#define kw_verbose(fmt, ...) kw_global_logging_broadcaster().emit(logging_message_t::make(::kawa::verbose(std::format(fmt, __VA_ARGS__))))
+#define kw_info(fmt, ...) kw_global_logging_broadcaster().emit({.qual = log::qualifier::info, .msg = std::format(fmt, __VA_ARGS__)})
+#define kw_warn(fmt, ...) kw_global_logging_broadcaster().emit({.qual = log::qualifier::warn, .msg = std::format(fmt, __VA_ARGS__)})
+#define kw_error(fmt, ...) kw_global_logging_broadcaster().emit({.qual = log::qualifier::error, .msg = std::format(fmt, __VA_ARGS__)})
+#define kw_verbose(fmt, ...) kw_global_logging_broadcaster().emit({.qual = log::qualifier::verbose, .msg = std::format(fmt, __VA_ARGS__)})
 
 namespace kawa 
 {
-	using logging_broadcaster = broadcaster<sized_any<64>>;
-	using logging_message_t = logging_broadcaster::message_t;
-
-	template<static_string qualifier, ansi_codes::text_color text_color>
-	struct qualified_message
+	struct log
 	{
-		constexpr static auto label = qualifier;
-		constexpr static auto colour = text_color;
-		qualified_message(string_view m)
-			: msg(m) {
+		enum class qualifier
+		{
+			info = ansi_codes::text_color::green,
+			warn = ansi_codes::text_color::yellow,
+			error = ansi_codes::text_color::red,
+			verbose = ansi_codes::text_color::cyan
+		} qual;
+
+		static string_view to_str(log::qualifier q) noexcept
+		{
+			switch (q)
+			{
+			case kawa::log::qualifier::info:
+				return "info";
+				break;
+			case kawa::log::qualifier::warn:
+				return "warn";
+				break;
+			case kawa::log::qualifier::error:
+				return "error";
+				break;
+			case kawa::log::qualifier::verbose:
+				return "verbose";
+				break;
+			default:
+				return "unspecified";
+				break;
+			}
 		}
 
 		string msg;
 	};
 
-	using info = qualified_message<"info", ansi_codes::text_color::green>;
-	using warn = qualified_message<"warn", ansi_codes::text_color::yellow>;
-	using error = qualified_message<"error", ansi_codes::text_color::red>;
-
-	using verbose = qualified_message<"verbose", ansi_codes::text_color::cyan>;
-
-	template<typename type>
-	concept is_qualified_message = requires
-	{		
-		type::label;
-		type::colour;
-	};
+	using log_broadcaster = broadcaster<log>;
 
 	struct basic_stdout_logger
 	{
-		basic_stdout_logger(logging_broadcaster& mgr)
-			: sub_guard(*this, mgr)
+		basic_stdout_logger(log_broadcaster& mgr)
+			: listner(this, mgr)
 		{
 		}
 
-		template<is_qualified_message message_t>
-		void write(const message_t& e)
+		void recieve(const log& l)
 		{
 			std::fputs(
 				std::format(
 					kw_ansi_fmt_block "{}" kw_ansi_reset_fmt_block ": {}\n",
-					(u32)message_t::colour,
+					(u32)l.qual,
 					(u32)ansi_codes::background_color::default_,
-					message_t::label.value,
-					e.msg
+					log::to_str(l.qual),
+					l.msg
 				).c_str(),
 				stdout
 			);
 		}
 
-		void dispatch(const logging_message_t& e)
-		{
-			e.try_match(
-				[&](const info& i) { write(i); },
-				[&](const warn& i) { write(i); },
-				[&](const error& i) { write(i); },
-				[&](const verbose& i) { write(i); },
-				[&]() { write(warn{std::format("unrecognized logging event type {}", e.vtable().type_info.name)}); }
-			);
-		}
-
-		logging_broadcaster::subscribe_guard sub_guard;
+		log_broadcaster::listner listner;
 	};
-
-	struct file_logger
-	{
-		file_logger(logging_broadcaster& mgr, string_view path)
-			: sub_guard(*this, mgr)
-		{
-			fopen_s(&out, path.data(), "w");
-		}
-
-		~file_logger()
-		{
-			fclose(out);
-		}
-
-		template<is_qualified_message message_t>
-		void write(const message_t& e)
-		{
-			std::fputs(
-				std::format(
-					"{}: {}\n",
-					message_t::label.value,
-					e.msg
-				).c_str(),
-				out
-			);
-		}
-
-		void dispatch(const logging_message_t& e)
-		{
-			e.try_match(
-				[&](const info& i) { write(i); },
-				[&](const warn& i) { write(i); },
-				[&](const error& i) { write(i); },
-				[&](const verbose& i) { write(i); },
-				[&](){write(warn{ std::format("unrecognized logging event type {}", e.vtable().type_info.name) }); }
-			);
-		}
-
-		FILE* out;
-		logging_broadcaster::subscribe_guard sub_guard;
-	};	
-
 
 	struct _g_logger
 	{
@@ -132,18 +87,18 @@ namespace kawa
 		{
 			if (!logger)
 			{
-				mgr = new logging_broadcaster();
+				mgr = new log_broadcaster();
 				logger = new basic_stdout_logger(*mgr);
 			}
 
 			return *logger;
 		}
 
-		static logging_broadcaster& lazy_get_broadcaster()
+		static log_broadcaster& lazy_get_broadcaster()
 		{
 			if (!logger)
 			{
-				mgr = new logging_broadcaster();
+				mgr = new log_broadcaster();
 				logger = new basic_stdout_logger(*mgr);
 			}
 
@@ -159,7 +114,7 @@ namespace kawa
 			}
 		}
 
-		static inline logging_broadcaster* mgr = nullptr;
+		static inline log_broadcaster* mgr = nullptr;
 		static inline basic_stdout_logger* logger = nullptr;
 	};
 }

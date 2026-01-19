@@ -6,6 +6,7 @@
 #include "fast_map.h"
 #include "task_manager.h"
 #include "stable_tuple.h"
+#include "broadcaster.h"
 
 namespace kawa
 {
@@ -45,6 +46,20 @@ namespace kawa
 		void* value_ptr;
 	};
 
+	template<typename value_t>
+	struct component_construct_event
+	{
+		value_t& component;
+		entity_id entity;
+	};
+
+	template<typename value_t>
+	struct component_destruct_event
+	{
+		value_t& component;
+		entity_id entity;
+	};
+
 	struct _opaque_callback_wrap
 	{
 		using invoker_fn_t = void(unsized_any&, usize, void*);
@@ -52,14 +67,12 @@ namespace kawa
 		unsized_any _storage;
 		invoker_fn_t* invoker = nullptr;
 
-
 		_opaque_callback_wrap() noexcept = default;
 		_opaque_callback_wrap(const _opaque_callback_wrap& other) noexcept = default;
 		_opaque_callback_wrap(_opaque_callback_wrap& other) noexcept = default;
 
 		_opaque_callback_wrap& operator=(const _opaque_callback_wrap& other) noexcept = default;
 		_opaque_callback_wrap& operator=(_opaque_callback_wrap& other) noexcept = default;
-
 
 		template<typename Fn, typename...Args>
 		void refresh(Args&&...args)
@@ -89,13 +102,102 @@ namespace kawa
 			}
 		}
 	};
+
+	struct component_construct_broadcaster
+	{
+		using container_t = sized_any<sizeof(broadcaster<int>)>;
+
+		using invoker_fn_t = void(container_t&, usize, void*);
+
+		invoker_fn_t* invoker = nullptr;
+		container_t bcaster;
+
+		component_construct_broadcaster() noexcept = default;
+		component_construct_broadcaster(const component_construct_broadcaster& other) noexcept = default;
+		component_construct_broadcaster(component_construct_broadcaster&& other) noexcept = default;
+
+		component_construct_broadcaster& operator=(const component_construct_broadcaster& other) noexcept = default;
+		component_construct_broadcaster& operator=(component_construct_broadcaster&& other) noexcept = default;
+
+		template<typename value_t>
+		void refresh()
+		{			
+			using bcaster_t = broadcaster<component_construct_event<value_t>>;
+			bcaster.refresh<bcaster_t>();
+
+			invoker = +[](container_t& bc, usize e, void* comp)
+				{
+
+					bc.unwrap<bcaster_t>().emit({.component = *reinterpret_cast<value_t*>(comp), .entity = e});
+				};
+		}
+
+		void release()
+		{
+			invoker = nullptr;
+		}
+
+		void try_invoke(usize index, void* comp) noexcept
+		{
+			if (invoker)
+			{
+				invoker(bcaster, index, comp);
+			}
+		}
+	};
 	
+
+	struct component_destruct_broadcaster
+	{
+		using container_t = sized_any<sizeof(broadcaster<int>)>;
+
+		using invoker_fn_t = void(container_t&, usize, void*);
+
+		invoker_fn_t* invoker = nullptr;
+		container_t bcaster;
+
+		component_destruct_broadcaster() noexcept = default;
+		component_destruct_broadcaster(const component_destruct_broadcaster& other) noexcept = default;
+		component_destruct_broadcaster(component_destruct_broadcaster&& other) noexcept = default;
+
+		component_destruct_broadcaster& operator=(const component_destruct_broadcaster& other) noexcept = default;
+		component_destruct_broadcaster& operator=(component_destruct_broadcaster&& other) noexcept = default;
+
+		template<typename value_t>
+		void refresh()
+		{
+			using bcaster_t = broadcaster<component_destruct_event<value_t>>;
+			bcaster.refresh<bcaster_t>();
+
+			invoker = +[](container_t& bc, usize e, void* comp)
+				{
+					bc.unwrap<bcaster_t>().emit({ .component = *reinterpret_cast<value_t*>(comp), .entity = e });
+				};
+		}
+
+		void release()
+		{
+			invoker = nullptr;
+		}
+
+		void try_invoke(usize index, void* comp) noexcept
+		{
+			if (invoker)
+			{
+				invoker(bcaster, index, comp);
+			}
+		}
+	};
+
 	struct component_storage : indirect_array_base
 	{
 		lifetime_vtable _vtable;
 
 		_opaque_callback_wrap on_construct_callback;
 		_opaque_callback_wrap on_destruct_callback;
+
+		component_construct_broadcaster ctor_broadcaster;
+		component_construct_broadcaster dtor_broadcaster;
 
 		template<typename T>
 		component_storage(construct_tag<T>, usize capacity)
@@ -112,6 +214,9 @@ namespace kawa
 				_vtable = other._vtable;
 				_capacity = other._capacity;
 				_occupied = other._occupied;
+
+				ctor_broadcaster = other.ctor_broadcaster;
+				dtor_broadcaster = other.dtor_broadcaster;
 
 				_allocate();
 
@@ -147,9 +252,13 @@ namespace kawa
 				_occupied = other._occupied;
 				_storage = other._storage;
 				_mask = other._mask;
+
 				_indirect_map = other._indirect_map;
 				_reverse_indirect_map = other._reverse_indirect_map;
 				
+				ctor_broadcaster = std::move(other.ctor_broadcaster);
+				dtor_broadcaster = std::move(other.dtor_broadcaster);
+
 				other._vtable.release();
 				other.release();
 			}
@@ -172,7 +281,10 @@ namespace kawa
 		{
 			release();
 
-			_vtable.refresh<T>();
+			_vtable.refresh<T>();		
+			ctor_broadcaster.refresh<T>();
+			dtor_broadcaster.refresh<T>();
+
 			_capacity = capacity;
 
 			_allocate();
@@ -216,6 +328,7 @@ namespace kawa
 		{
 			auto out = new (reinterpret_cast<T*>(_storage) + index) T(std::forward<Args>(args)...);
 
+			ctor_broadcaster.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
 			on_construct_callback.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
 
 			return *out;
@@ -237,6 +350,8 @@ namespace kawa
 
 		void _destruct_try_callback(usize index)
 		{
+			dtor_broadcaster.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
+
 			on_destruct_callback.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
 
 			_vtable.dtor_offset(_storage, index);
@@ -391,6 +506,16 @@ namespace kawa
 			return *(indirect_array_base*)this;
 		}
 
+	};
+
+	struct entity_destroyed_signal
+	{
+		entity_id e;
+	};
+
+	struct entity_added_signal
+	{
+		entity_id e;
 	};
 
 	struct registry 
@@ -1097,19 +1222,30 @@ namespace kawa
 		}
 
 		template<typename T, typename...Args>
-		T& emplace(entity_id index, Args&&...args)
+		T& try_emplace(entity_id index, Args&&...args) noexcept
+		{
+			if (auto v = try_get<T>(index))
+			{
+				return *v;
+			}
+
+			return emplace<T>(index, std::forward<Args>(args)...);
+		}
+
+		template<typename T, typename...Args>
+		T& emplace(entity_id index, Args&&...args) noexcept
 		{
 			return _lazy_get_storage<T>().emplace<T>(index, std::forward<Args>(args)...);
 		}
 
 		template<typename...Args>
-		void erase(entity_id e)
+		void erase(entity_id e) noexcept
 		{
 			((_lazy_get_storage<Args>().erase(e)), ...);
 		}
 
 		template<typename...Args>
-		void copy(entity_id from, entity_id to)
+		void copy(entity_id from, entity_id to) noexcept
 		{
 			((_lazy_get_storage<Args>().copy(from, to)), ...);
 		}
@@ -1120,7 +1256,7 @@ namespace kawa
 			((_lazy_get_storage<Args>().move(from, to)), ...);
 		}
 
-		void clone(entity_id from, entity_id to)
+		void clone(entity_id from, entity_id to) noexcept
 		{
 			if (!alive(from) || !alive(to))
 				return;
@@ -1134,7 +1270,7 @@ namespace kawa
 			}
 		}
 
-		entity_id clone(entity_id from)
+		entity_id clone(entity_id from) noexcept
 		{
 			entity_id to;
 
@@ -1158,7 +1294,7 @@ namespace kawa
 		}
 
 		template<typename T>
-		T& get(entity_id e)
+		T& get(entity_id e) noexcept
 		{
 			return _lazy_get_storage<T>().get<T>(e);
 		}
@@ -1170,7 +1306,7 @@ namespace kawa
 		//}
 
 		template<typename T>
-		T* try_get(entity_id e)
+		T* try_get(entity_id e) noexcept
 		{
 			return _lazy_get_storage<T>().try_get<T>(e);
 		}
@@ -1181,7 +1317,7 @@ namespace kawa
 		//	return kawa::forward_as_tuple(_lazy_get_storage<Args>().template try_get<Args>(e)...);
 		//}
 
-		void destroy(entity_id id)
+		void destroy(entity_id id) noexcept
 		{
 			if (!_entries.contains(id)) return;
 
@@ -1197,13 +1333,13 @@ namespace kawa
 			return ((_lazy_get_storage<Args>().contains(e)) && ...);
 		}
 
-		defer_buffer defer(bool flush_on_dtor = true, bool fifo = true)
+		defer_buffer defer(bool flush_on_dtor = true, bool fifo = true) noexcept
 		{
 			return { {*this, flush_on_dtor, fifo} };
 		}
 
 		template<typename T>
-		component_storage&_lazy_get_storage() noexcept
+		component_storage& _lazy_get_storage() noexcept
 		{
 			constexpr auto hash = type_hash<T>();
 
@@ -1215,9 +1351,23 @@ namespace kawa
 			{
 				return _storages.insert(hash, construct_tag<T>{}, _cfg.max_entity_count);
 			}
-		}		
+		}	
+
+		template<typename T>
+		broadcaster<component_construct_event<T>>& component_construct_broadcaster() noexcept
+		{
+			return _lazy_get_storage<T>().ctor_broadcaster.bcaster.unwrap<broadcaster<component_construct_event<T>>>();
+		}
+
+		template<typename T>
+		broadcaster<component_destruct_event<T>>& component_destruct_broadcaster() noexcept
+		{
+			return _lazy_get_storage<T>().dtor_broadcaster.bcaster.unwrap<broadcaster<component_destruct_event<T>>>();
+		}
 
 		hash_map<component_storage> _storages;
+		broadcaster<entity_added_signal> entity_added_broadcaster;
+		broadcaster<entity_destroyed_signal> entity_destroyed_broadcaster;
 		indirect_array<entity_id> _free_list;
 		indirect_array<entity_id> _entries;
 		entity_id _id_counter = 0;
