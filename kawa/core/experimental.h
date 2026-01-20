@@ -60,11 +60,11 @@ namespace kawa
 	struct basic_stdout_logger
 	{
 		basic_stdout_logger(log_broadcaster& mgr)
-			: listner(this, mgr)
+			: listner(this, mgr, &basic_stdout_logger::print)
 		{
 		}
 
-		void recieve(const log& l)
+		void print(const log& l)
 		{
 			std::fputs(
 				std::format(

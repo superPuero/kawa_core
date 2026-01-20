@@ -5,29 +5,23 @@
 
 using namespace kawa;
 
-struct event { i32 value; };
 
 struct sub
 {
-    sub(multi_broadcaster& mb)
-        : listner{this, mb.get<event>()}
-    {
-
-    }
-
-    broadcaster<event>::listner listner;
-    void recieve(const event& e)
-    {
-        kw_info("got event {}", e.value);
-    }
-       
+	void fn(const int& v)
+	{
+		kw_info("{}", v);
+	}
 
 };
 
+
 int main()
 {
-    multi_broadcaster bc;
-    sub s(bc);
+	broadcaster<int> v;
+	sub s;
 
-    bc.emit<event>({42});
+	v.subscribe(s, &sub::fn);
+
+	v.emit(42);
 }

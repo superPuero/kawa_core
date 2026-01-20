@@ -18,10 +18,10 @@ namespace kawa
 		using message_t = message_type;
 
 		broadcaster() noexcept = default;
-		
+
 		/// INTENTIONAL: Empty to prevent copying the listeners. 
 		/// We dont what that bacause listeners are bound to specific memory addresses of the broadcaster.
-		broadcaster(const broadcaster& other) noexcept {}		
+		broadcaster(const broadcaster& other) noexcept {}
 
 		broadcaster(broadcaster&& other) noexcept = default;
 
@@ -31,11 +31,11 @@ namespace kawa
 		struct listner
 		{
 			template<typename T>
-			listner(T* self_, broadcaster& manager) noexcept
+			listner(T* self_, broadcaster& manager, void(T::*mem_ptr)(const message_t&)) noexcept
 				: self(self_)
 				, mgr(manager)
 			{
-				mgr.subscribe(*self_);
+				mgr.subscribe(*self_, mem_ptr);
 			}
 
 			listner(const listner& other) noexcept = delete;
@@ -55,26 +55,33 @@ namespace kawa
 			broadcaster& mgr;
 		};
 
+		using mem_fn_container = sized_any<32>;
+
 		struct _listner_backend
 		{
-			using recieve_invoke_fn_t = void(void*, const message_t& msg);
+			using recieve_invoke_fn_t = void(void*, mem_fn_container&, const message_t& msg);
+
 			void* value_ptr = nullptr;
+			mem_fn_container member_ptr;
 			recieve_invoke_fn_t* recieve_invoke_fn = nullptr;
 
 			void recieve(const message_t& msg) noexcept
 			{
-				recieve_invoke_fn(value_ptr, msg);
+				recieve_invoke_fn(value_ptr, member_ptr, msg);
 			}
 		};
 
-		template<typename value_t>
-		void subscribe(value_t& val) noexcept
+		template<typename T>
+		void subscribe(T& val, void(T::* mem_ptr)(const message_t&)) noexcept
 		{
 			auto& d = _listners.emplace_back();
+			using m_ptr = decltype(mem_ptr);
+
+			d.member_ptr.refresh<m_ptr>(mem_ptr);
 			d.recieve_invoke_fn =
-				[](void* value_ptr, const message_t& msg)
+				+[](void* value_ptr, mem_fn_container& mem_p, const message_t& msg)
 				{
-					static_cast<value_t*>(value_ptr)->recieve(msg);
+					(static_cast<T*>(value_ptr)->*mem_p.unwrap<m_ptr>())(msg);
 				};
 			d.value_ptr = &val;
 		}
@@ -119,7 +126,7 @@ namespace kawa
 		}
 
 		dyn_array<_listner_backend> _listners;
-	};		
+	};
 }
 
 #endif // !KAWA_BROADCASTER

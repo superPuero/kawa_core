@@ -30,6 +30,20 @@ namespace kawa
 			return *this;
 		}
 
+		constexpr flag_set& operator & (T flag) noexcept
+		{
+			value & static_cast<flag_type>(flag);
+			return *this;
+
+		}
+
+		constexpr flag_set& operator &= (T flag) noexcept
+		{
+			value &= static_cast<flag_type>(flag);
+			return *this;
+		}
+
+
 		constexpr bool has(T flag) const noexcept
 		{
 			return value & static_cast<flag_type>(flag);
