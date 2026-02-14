@@ -1,0 +1,27 @@
+<html>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="search.css">
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<body>
+    <input type="text" name="name-input"
+           placeholder="Type name to add...">
+
+    <button hx-post="/insert-name"
+            hx-include="[name='name-input']"
+            hx-swap="none"
+            hx-on::after-request="
+                document.body.dispatchEvent(new Event('refresh_search'))
+                document.getElementsByName('name-input')[0].value = ''
+            ">
+        insert
+    </button>
+
+    <input type="text" name="query"
+           hx-get="/search-name"
+           hx-trigger="input changed delay:200ms, refresh_search from:body"
+           hx-target="#results"
+           placeholder="Type name to search...">
+
+    <ul id="results"></ul>
+</body>
+</html>

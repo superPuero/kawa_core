@@ -1,0 +1,76 @@
+body 
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 10vh;
+    gap: 20px;
+    background: linear-gradient(90deg, #333 10%, #333 70%);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+}
+
+button {
+    width: 200px;
+    font-size: 20px;
+    border: solid;
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.1);
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+    button:hover {
+        width: 220px; 
+        background: #ffffff;
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+    }
+
+input[type="text"] {
+    width: 30%;
+    padding: 15px 25px;
+    font-size: 18px;
+    border: none;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+    input[type="text"]:focus {
+        width: 35%;
+        background: #ffffff;
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+    }
+
+#results {
+    list-style: none;
+    padding: 0;
+    margin-top: 20px;
+    width: 100%;
+    max-width: 400px;
+    background: white;
+    border-radius: 15px;
+    overflow: hidden; /* Clips corners of children */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+    /* Assuming your server returns <li> items */
+    #results li {
+        padding: 15px 20px;
+        border-bottom: 1px solid #eee;
+        color: #333;
+        transition: background 0.2s;
+        cursor: pointer;
+    }
+
+        #results li:hover {
+            background-color: #f8f9ff;
+            color: #667eea;
+        }
+
+        #results li:last-child {
+            border-bottom: none;
+        }

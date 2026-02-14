@@ -1601,7 +1601,7 @@ namespace kawa
 
 			using T = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<1>>;
 
-			_lazy_get_storage<T>().set_on_construct<Fn>(std::forward<Fn>(func));
+			_lazy_get_storage<T>().template set_on_construct<Fn>(std::forward<Fn>(func));
 		}
 
 		template<typename Fn>
@@ -1611,13 +1611,13 @@ namespace kawa
 
 			using T = std::remove_cvref_t<typename function_traits<Fn>::template arg_at<1>>;
 
-			_lazy_get_storage<T>().set_on_destruct<Fn>(std::forward<Fn>(func));
+			_lazy_get_storage<T>().template set_on_destruct<Fn>(std::forward<Fn>(func));
 		}
 
 		template<typename T>
 		T& add(entity_id index, T&& v)
 		{
-			return _lazy_get_storage<std::remove_cvref_t<T>>().emplace<std::remove_cvref_t<T>>(index, std::forward<T>(v));
+			return _lazy_get_storage<std::remove_cvref_t<T>>().template emplace<std::remove_cvref_t<T>>(index, std::forward<T>(v));
 		}
 
 		template<typename T, typename...Args>
@@ -1634,7 +1634,7 @@ namespace kawa
 		template<typename T, typename...Args>
 		T& emplace(entity_id index, Args&&...args) noexcept
 		{
-			return _lazy_get_storage<T>().emplace<T>(index, std::forward<Args>(args)...);
+			return _lazy_get_storage<T>().template emplace<T>(index, std::forward<Args>(args)...);
 		}
 
 		template<typename...Args>
@@ -1695,7 +1695,7 @@ namespace kawa
 		template<typename T>
 		T& get(entity_id e) noexcept
 		{
-			return _lazy_get_storage<T>().get<T>(e);
+			return _lazy_get_storage<T>().template get<T>(e);
 		}
 
 		//template<typename...Args>
@@ -1707,7 +1707,7 @@ namespace kawa
 		template<typename T>
 		T* try_get(entity_id e) noexcept
 		{
-			return _lazy_get_storage<T>().try_get<T>(e);
+			return _lazy_get_storage<T>().template try_get<T>(e);
 		}
 
 		//template<typename...Args>
@@ -1760,13 +1760,13 @@ namespace kawa
 		template<typename T>
 		broadcaster<component_construct_event<T>>& component_construct_broadcaster() noexcept
 		{
-			return _lazy_get_storage<T>().ctor_broadcaster.bcaster.unwrap<broadcaster<component_construct_event<T>>>();
+			return _lazy_get_storage<T>().ctor_broadcaster.bcaster.template unwrap<broadcaster<component_construct_event<T>>>();
 		}
 
 		template<typename T>
 		broadcaster<component_destruct_event<T>>& component_destruct_broadcaster() noexcept
 		{
-			return _lazy_get_storage<T>().dtor_broadcaster.bcaster.unwrap<broadcaster<component_destruct_event<T>>>();
+			return _lazy_get_storage<T>().dtor_broadcaster.bcaster.template unwrap<broadcaster<component_destruct_event<T>>>();
 		}
 
 		struct _entity_set
