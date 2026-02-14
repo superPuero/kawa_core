@@ -1344,7 +1344,7 @@ namespace kawa
 
 			if ([&]<usize...I>(std::index_sequence<I...>) {
 				return (... && required_storage_masks[I][i]);
-			}(std::make_index_sequence<sizeof...(require_idxs) - 1>{}))
+			}(std::make_index_sequence<sizeof...(require_idxs)>{}))
 			{
 				func(
 					std::get<args_idxs>(getters).get(i)...
