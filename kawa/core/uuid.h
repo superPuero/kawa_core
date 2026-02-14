@@ -11,9 +11,9 @@ namespace kawa
 	class uuid
 	{
 	public:
-		inline uuid() noexcept : _val(0) {};
+		constexpr inline uuid() noexcept : _val(0) {};
 
-		inline uuid(u64 val) noexcept : _val(val) {};
+		constexpr inline uuid(u64 val) noexcept : _val(val) {};
 			
 		inline void nullify() noexcept
 		{

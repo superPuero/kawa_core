@@ -1,56 +1,51 @@
 #ifndef KAWA_FLAG_SET
 #define KAWA_FLAG_SET
 
-#include <concepts>
-
-namespace kawa
+template<typename enum_t>
+	requires std::is_enum_v<enum_t>
+struct flag_set
 {
-	template<typename T>
-		requires std::is_enum_v<T>
-	struct flag_set
+	using underlying_t = std::underlying_type_t<enum_t>;
+
+	flag_set() = default;
+
+	flag_set(std::initializer_list<enum_t> list)
 	{
-		using flag_type = std::underlying_type_t<T>;
-
-		template<typename...Args>
-		constexpr flag_set(Args...flags) noexcept
+		for (auto v : list)
 		{
-			set(flags...);
+			set(v);
 		}
+	}
 
-		template<typename...Args>
-		constexpr void set(Args...flags) noexcept
+	flag_set(std::initializer_list<underlying_t> list)
+	{
+		for (auto v : list)
 		{
-			((value |= static_cast<flag_type>(flags)), ...);
+			set(v);
 		}
-	
-		template<typename...Args>
-		constexpr flag_set<T>& operator=(Args... flags) noexcept
-		{
-			set(flags...);
-			return *this;
-		}
+	}
 
-		constexpr flag_set& operator & (T flag) noexcept
-		{
-			value & static_cast<flag_type>(flag);
-			return *this;
+	void set(enum_t v)
+	{
+		value |= static_cast<underlying_t>(v);
+	}
 
-		}
+	void set(underlying_t v)
+	{
+		value |= v;
+	}
 
-		constexpr flag_set& operator &= (T flag) noexcept
-		{
-			value &= static_cast<flag_type>(flag);
-			return *this;
-		}
+	enum_t as_enum() noexcept
+	{
+		return static_cast<enum_t>(value);
+	}
 
+	underlying_t as_underlying() noexcept
+	{
+		return value;
+	}
 
-		constexpr bool has(T flag) const noexcept
-		{
-			return value & static_cast<flag_type>(flag);
-		}
-
-		flag_type value{};
-	};
-}
+	underlying_t value;
+};
 
 #endif

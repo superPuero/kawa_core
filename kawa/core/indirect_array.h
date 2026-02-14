@@ -32,8 +32,6 @@ namespace kawa
 		usize _occupied = 0;
 	};
 
-
-
 	template<typename T>
 	struct indirect_array : indirect_array_base
 	{

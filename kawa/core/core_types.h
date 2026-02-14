@@ -18,6 +18,7 @@
 #include <ranges>
 #include <type_traits>
 #include <source_location>
+#include <string_view>
 
 #include "macros.h"
 

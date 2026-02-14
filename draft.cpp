@@ -1,27 +1,15 @@
 #include "kawa/core/core.h"
-#include "kawa/core/experimental.h"
-
-#include "kawa/core/multi_broadcaster.h"
 
 using namespace kawa;
 
-
-struct sub
+struct user_data
 {
-	void fn(const int& v)
-	{
-		kw_info("{}", v);
-	}
-
+	string name;
+	string email;
 };
-
 
 int main()
 {
-	broadcaster<int> v;
-	sub s;
-
-	v.subscribe(s, &sub::fn);
-
-	v.emit(42);
+	registry r({.name = "kawa_db", .max_entity_count = 1'000'000, .max_component_count = 32});	
+	
 }

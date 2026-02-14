@@ -68,6 +68,11 @@ namespace kawa
             std::copy_n(str, N, value);
         }
 
+        explicit consteval static_string(const char* str)
+        {
+            std::copy_n(str, N, value);
+        }
+
         template<usize i>
         consteval bool operator==(const static_string<i>& other) const
         {
@@ -119,6 +124,8 @@ namespace kawa
     template<typename T, static_string alias_tag_>
     struct strong_alias
     {
+        using inner = T;
+
         T* operator->() noexcept
         {
             return &value;

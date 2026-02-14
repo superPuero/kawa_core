@@ -117,34 +117,34 @@ __VA_OPT__(kw_for_each_again kw_parens (macro, __VA_ARGS__))\
 #define kw_log_handle stdout
 #endif
 
-#define kw_put(dest, fmt, ...)  std::fputs(std::format(fmt, __VA_ARGS__).c_str(), dest)
+#define kw_put(dest, ...)  std::fputs(std::format(__VA_ARGS__).c_str(), dest)
 
-#define kw_print(fmt, ...) kw_put(kw_log_handle, fmt, __VA_ARGS__)
-#define kw_println(fmt, ...) kw_put(kw_log_handle, fmt, __VA_ARGS__), kw_put(kw_log_handle, "{}", "\n")
+#define kw_print(...) kw_put(kw_log_handle, __VA_ARGS__)
+#define kw_println(...) kw_put(kw_log_handle, __VA_ARGS__), kw_put(kw_log_handle, "{}", "\n")
 
 #define kw_print_ansi_cfg(text_color_ansi_code, background_color_ansi_code) kw_print("{}[{};{}m", kw_ansi_esc_sequence, text_color_ansi_code, background_color_ansi_code)
 
-#define kw_print_colored(text_color_ansi_code, background_color_ansi_code, fmt, ...) kw_print_ansi_cfg(text_color_ansi_code, background_color_ansi_code); kw_print(fmt, __VA_ARGS__); kw_print_ansi_cfg(kw_ansi_color_default, kw_ansi_background_color_default) 
-#define kw_println_colored(text_color_ansi_code, background_color_ansi_code, fmt, ...) kw_print_ansi_cfg(text_color_ansi_code, background_color_ansi_code); kw_println(fmt, __VA_ARGS__); kw_print_ansi_cfg(kw_ansi_color_default, kw_ansi_background_color_default) 
+#define kw_print_colored(text_color_ansi_code, background_color_ansi_code, ...) kw_print_ansi_cfg(text_color_ansi_code, background_color_ansi_code); kw_print(__VA_ARGS__); kw_print_ansi_cfg(kw_ansi_color_default, kw_ansi_background_color_default) 
+#define kw_println_colored(text_color_ansi_code, background_color_ansi_code, ...) kw_print_ansi_cfg(text_color_ansi_code, background_color_ansi_code); kw_println(__VA_ARGS__); kw_print_ansi_cfg(kw_ansi_color_default, kw_ansi_background_color_default) 
 
 
-#define kw_print_with_colored_label(text_color_ansi_code, text_background_color_ansi_code, label, fmt, ...)\
+#define kw_print_with_colored_label(text_color_ansi_code, text_background_color_ansi_code, label, ...)\
 kw_print_ansi_cfg(text_color_ansi_code, text_background_color_ansi_code);\
 kw_print("{} ", #label);\
 kw_print_ansi_cfg(kw_ansi_color_default, kw_ansi_background_color_default);\
-kw_print(fmt, __VA_ARGS__)
+kw_print(__VA_ARGS__)
 
-#define kw_println_with_colored_label(text_color_ansi_code, text_background_color_ansi_code, label, fmt, ...)\
+#define kw_println_with_colored_label(text_color_ansi_code, text_background_color_ansi_code, label, ...)\
 kw_print_ansi_cfg(text_color_ansi_code, text_background_color_ansi_code);\
 kw_print("{} ", #label);\
 kw_print_ansi_cfg(kw_ansi_color_default, kw_ansi_background_color_default);\
-kw_println(fmt, __VA_ARGS__)
+kw_println(__VA_ARGS__)
 
 
-#define kw_info(fmt, ...) kw_println_with_colored_label(kw_ansi_color_green, kw_ansi_background_color_default, info, fmt, __VA_ARGS__)
+#define kw_info(...) kw_println_with_colored_label(kw_ansi_color_green, kw_ansi_background_color_default, info, __VA_ARGS__)
 #define kw_info_expr(var) kw_info("{}: {}", #var, var)
-#define kw_warn(fmt, ...) kw_println_with_colored_label(kw_ansi_color_yellow, kw_ansi_background_color_default, warn, fmt, __VA_ARGS__)
-#define kw_error(fmt, ...) kw_println_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, error, fmt, __VA_ARGS__); kw_debugbreak()
+#define kw_warn(...) kw_println_with_colored_label(kw_ansi_color_yellow, kw_ansi_background_color_default, warn, __VA_ARGS__)
+#define kw_error(...) kw_println_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, error, __VA_ARGS__); kw_debugbreak()
 
 #define kw_verify(expr)\
 		do { \
@@ -154,10 +154,10 @@ kw_println(fmt, __VA_ARGS__)
             } \
         } while(0)
 
-#define kw_verify_msg(expr, fmt, ...) \
+#define kw_verify_msg(expr, ...) \
         do { \
             if (!(expr)) { \
-                kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, verify, fmt, __VA_ARGS__);\
+                kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, verify, __VA_ARGS__);\
 				kw_debugbreak();\
             } \
         } while(0)
@@ -166,8 +166,8 @@ kw_println(fmt, __VA_ARGS__)
 				kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, panic, "{}", "encountered"); \
 				kw_debugbreak();
 
-#define kw_panic_msg(fmt, ...) \
-				kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, panic, fmt, __VA_ARGS__);\
+#define kw_panic_msg(...) \
+				kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, panic, __VA_ARGS__);\
 				kw_debugbreak()
 
 #ifdef kw_debug
@@ -179,13 +179,16 @@ kw_println(fmt, __VA_ARGS__)
             } \
         } while(0)
 
-#define kw_assert_msg(expr, fmt, ...) \
+
+
+#define kw_assert_msg(expr, ...) \
         do { \
             if (!(expr)) { \
-                kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, assertion, fmt, __VA_ARGS__);\
+                kw_print_with_colored_label(kw_ansi_color_red, kw_ansi_background_color_default, assertion, __VA_ARGS__);\
 				kw_debugbreak();\
             } \
         } while(0)
+
 
 #define kw_debug_expand(x) x
 #else

@@ -11,13 +11,13 @@
 #include "core_types.h"
 
 #if defined(kw_compiler_clang)
-#	define kw_typename_prefix "kawa::type_name(void) [T = "
+#	define kw_typename_prefix "kawa::_type_name(void) [T = "
 #	define kw_typename_suffix "]"
 #elif defined(kw_compiler_msvc)
-#	define kw_typename_prefix "kawa::type_name<"
+#	define kw_typename_prefix "kawa::_type_name<"
 #	define kw_typename_suffix ">(void) noexcept"
 #elif defined(kw_compiler_gnu) 
-#	define kw_typename_prefix "kawa::type_name() [with T = "
+#	define kw_typename_prefix "kawa::_type_name() [with T = "
 #	define kw_typename_suffix "; std::string_view = std::basic_string_view<char>]"
 #else
 #	define kw_typename_prefix ""
@@ -57,7 +57,7 @@ namespace kawa
 	}
 
 	template<typename T>
-	inline consteval kawa::string_view type_name() noexcept
+	inline consteval kawa::string_view _type_name() noexcept
 	{
 		return _::type_name_helper(std::source_location::current().function_name());
 	}
@@ -68,10 +68,19 @@ namespace kawa
 	}
 
 	template<typename T>
-	inline consteval u64 type_hash() noexcept
+	inline consteval u64 _type_hash() noexcept
 	{
-		return string_hash(type_name<T>());
+		return string_hash(_type_name<T>());
 	}
+
+	template<typename T>
+	constexpr u64 type_hash = _type_hash<T>();
+
+	template<typename T>
+	constexpr string_view type_name = _type_name<T>();
+
+	template<typename T>
+	constexpr auto static_type_name = static_string<type_name<T>.size()>(type_name<T>.data());
 
 	template<typename T>
 	struct construct_tag{};
@@ -88,8 +97,8 @@ namespace kawa
 
 		template<typename T>
 		inline constexpr type_info(construct_tag<T>)
-			: name(type_name<T>())
-			, hash(type_hash<T>())
+			: name(type_name<T>)
+			, hash(type_hash<T>)
 			, size(sizeof(T))
 			, alignment(alignof(T))
 		{
@@ -114,7 +123,7 @@ namespace kawa
 		template<typename T>
 		constexpr inline bool is() const noexcept
 		{
-			return hash == type_hash<T>();
+			return hash == type_hash<T>;
 		}
 
 		void reset()
@@ -193,6 +202,42 @@ namespace kawa
 
 	template<typename T>
 	struct function_traits<T> : function_traits<decltype(&T::operator())> {};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(*)(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(&)(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename ObjTy, typename...ArgTy>
+	struct function_traits<RetTy(ObjTy::*)(ArgTy...) const noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
 
 	template<typename Tuple, usize start, usize end, typename = void>
 	struct sub_tuple

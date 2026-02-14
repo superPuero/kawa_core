@@ -20,7 +20,18 @@ namespace kawa
 	struct task_handle
 	{
 		constexpr static u32 _invalid_worker = std::numeric_limits<u32>::max();
-		u32 worker = 0;
+
+		bool is_valid()
+		{
+			return worker != _invalid_worker;
+		}
+
+		void invalidate()
+		{
+			worker = _invalid_worker;
+		}
+
+		u32 worker = _invalid_worker;
 		u32 generation = 0;
 	};
 
@@ -91,7 +102,7 @@ namespace kawa
 			}
 		}
 
-		task_handle schedule_try(task_fn&& task) noexcept
+		task_handle schedule_try(task_fn task) noexcept
 		{
 			for (u32 i = 0; i < _workers.size(); i++)
 			{
@@ -102,7 +113,7 @@ namespace kawa
 
 				if (w.generation.compare_exchange_strong(gen, gen + 1, std::memory_order_acquire))
 				{
-					w.task = std::forward<task_fn>(task);
+					w.task = task;
 
 					w.semaphore.release();
 
@@ -120,13 +131,13 @@ namespace kawa
 			return th;
 		}
 
-		task_handle schedule_wait_if_necessary(task_fn&& task)
+		task_handle schedule_wait_if_necessary(task_fn task)
 		{
 			task_handle out;
 
 			while (true)
 			{
-				out = schedule_try(std::forward<task_fn>(task));
+				out = schedule_try(task);
 				if (out.worker != task_handle::_invalid_worker) return out;
 				std::this_thread::yield();
 			}
