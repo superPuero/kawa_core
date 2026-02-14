@@ -10,9 +10,7 @@
 
 namespace kawa
 {
-	enum entity_id : u64 {};
-
-	constexpr static auto nullent = std::numeric_limits<std::underlying_type_t<entity_id>>::max();
+	enum entity_id : u64 { nullent = std::numeric_limits<u64>::max() };
 
 	static bool is_valid(entity_id id) noexcept
 	{
@@ -39,7 +37,7 @@ namespace kawa
 		{
 			return storage;
 		}
-		
+
 		entity_id* end() const noexcept
 		{
 			return storage + count;
@@ -130,14 +128,14 @@ namespace kawa
 
 		template<typename value_t>
 		void refresh()
-		{			
+		{
 			using bcaster_t = broadcaster<component_construct_event<value_t>>;
 			bcaster.refresh<bcaster_t>();
 
 			invoker = +[](container_t& bc, usize e, void* comp)
 				{
 
-					bc.unwrap<bcaster_t>().emit({.component = *reinterpret_cast<value_t*>(comp), .entity = (entity_id)e});
+					bc.unwrap<bcaster_t>().emit({ .component = *reinterpret_cast<value_t*>(comp), .entity = (entity_id)e });
 				};
 		}
 
@@ -154,7 +152,7 @@ namespace kawa
 			}
 		}
 	};
-	
+
 
 	struct component_destruct_broadcaster
 	{
@@ -232,7 +230,7 @@ namespace kawa
 				memcpy(_mask, other._mask, _capacity * sizeof(_mask[0]));
 				memcpy(_indirect_map, other._indirect_map, _capacity * sizeof(_indirect_map[0]));
 				memcpy(_reverse_indirect_map, other._reverse_indirect_map, _capacity * sizeof(_reverse_indirect_map[0]));
-				
+
 				on_destruct_callback = other.on_construct_callback;
 				on_construct_callback = other.on_construct_callback;
 
@@ -264,7 +262,7 @@ namespace kawa
 
 				_indirect_map = other._indirect_map;
 				_reverse_indirect_map = other._reverse_indirect_map;
-				
+
 				ctor_broadcaster = std::move(other.ctor_broadcaster);
 				dtor_broadcaster = std::move(other.dtor_broadcaster);
 
@@ -290,7 +288,7 @@ namespace kawa
 		{
 			release();
 
-			_vtable.refresh<T>();		
+			_vtable.refresh<T>();
 			ctor_broadcaster.refresh<T>();
 			dtor_broadcaster.refresh<T>();
 
@@ -527,14 +525,14 @@ namespace kawa
 		entity_id e;
 	};
 
-	struct registry 
+	struct registry
 	{
 		struct defer_buffer
 		{
 			struct config
 			{
 				registry& registry;
-				bool flush_on_dtor = true; 
+				bool flush_on_dtor = true;
 				bool fifo = true;
 			};
 			defer_buffer(const config& cfg) noexcept : _cfg(cfg) {}
@@ -542,7 +540,7 @@ namespace kawa
 
 			~defer_buffer()
 			{
-				if(_cfg.flush_on_dtor)
+				if (_cfg.flush_on_dtor)
 				{
 					flush();
 				}
@@ -656,7 +654,7 @@ namespace kawa
 					for (auto& t : tasks)
 					{
 						t();
-					}					
+					}
 				}
 				else
 				{
@@ -684,7 +682,7 @@ namespace kawa
 			{
 
 			}
-			
+
 			self_t& from_view(const entity_view& view)
 			{
 				if (main.size() < view.count)
@@ -772,7 +770,7 @@ namespace kawa
 		template<typename...Args>
 		void ensure() noexcept
 		{
-			((_lazy_get_storage<Args>()),...);
+			((_lazy_get_storage<Args>()), ...);
 		}
 
 		template<typename...Args>
@@ -831,14 +829,14 @@ namespace kawa
 
 		template<std::invocable<entity_id, component_info> Fn>
 		void query_info(Fn&& info_func)
-		{		
+		{
 			for (auto e : _entries.as_base())
 			{
 				for (auto& s : _storages.values)
 				{
 					if (s.contains(e))
 					{
-						info_func(e, component_info{ s._vtable.type_info, ((u8*)s._storage) + s._vtable.type_info.size * e });
+						info_func((entity_id)e, component_info{ s._vtable.type_info, ((u8*)s._storage) + s._vtable.type_info.size * e });
 					}
 				}
 			}
@@ -886,7 +884,7 @@ namespace kawa
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
 					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					&view,
+					& view,
 					std::forward<Fn>(func)
 				);
 			}
@@ -897,7 +895,7 @@ namespace kawa
 					typename q::clear_args
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-					&view,
+					& view,
 					std::forward<Fn>(func)
 				);
 			}
@@ -948,7 +946,7 @@ namespace kawa
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
 					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					&view,
+					& view,
 					out,
 					std::forward<FilterFn>(func)
 				);
@@ -963,7 +961,7 @@ namespace kawa
 						typename q::clear_args
 					>(
 						std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-						&view,
+						& view,
 						out,
 						std::forward<FilterFn>(func)
 					);
@@ -1100,7 +1098,7 @@ namespace kawa
 			}
 		}
 
-		struct _entity_id_getter 
+		struct _entity_id_getter
 		{
 			inline entity_id get(usize i) const noexcept
 			{
@@ -1122,19 +1120,19 @@ namespace kawa
 		template<typename T>
 		struct _optional_getter
 		{
-			T* _data;       
-			bool* _mask;    
+			T* _data;
+			bool* _mask;
 
 			inline T* get(usize i) const noexcept
 			{
-				if (_mask[i]) 
+				if (_mask[i])
 				{
 					return _data + i;
 				}
 				return nullptr;
 			}
 		};
-	
+
 		template<typename T>
 		struct _make_query_param_getter
 		{
@@ -1180,7 +1178,7 @@ namespace kawa
 
 			if (view)
 			{
-				for(auto i : *view)
+				for (auto i : *view)
 				{
 					if (std::forward<Fn>(func)(
 						std::get<args_idxs>(getters).get(i)...
@@ -1315,7 +1313,7 @@ namespace kawa
 
 			std::forward<Fn>(func)(
 				std::get<args_idxs>(getters).get(i)...
-			);
+				);
 		}
 
 		template<
@@ -1337,7 +1335,7 @@ namespace kawa
 					*this
 				)()...
 			);
-			
+
 			array<bool*, sizeof...(require_idxs)> required_storage_masks = {
 				_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()._mask...
 			};
@@ -1372,12 +1370,12 @@ namespace kawa
 				{
 					std::forward<Fn>(func)(
 						std::get<args_idxs>(getters).get(i)...
-					);
+						);
 				}
 			}
 			else
 			{
-				for (auto i : _entries)
+				for (auto i : _entries.as_base())
 				{
 					std::forward<Fn>(func)(
 						std::get<args_idxs>(getters).get(i)...
@@ -1407,7 +1405,7 @@ namespace kawa
 			);
 
 			array<component_storage*, sizeof...(require_idxs)> required_storages = {
-				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()... 
+				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
 			};
 
 			if (view)
@@ -1437,7 +1435,7 @@ namespace kawa
 
 				for (usize i = 0; i < required_storages.size(); i++)
 				{
-					if (required_storages[i]->_occupied < 
+					if (required_storages[i]->_occupied <
 						required_storages[driver_index]->_occupied)
 					{
 						driver_index = i;
@@ -1530,8 +1528,10 @@ namespace kawa
 							{
 								i = map[(group_id * work_per_group) + e];
 
-								if ([&]<usize...I>(std::index_sequence<I...>) 
-								{ return (... && required_storage_masks[I][i]); }
+								if ([&]<usize...I>(std::index_sequence<I...>)
+								{
+									return (... && required_storage_masks[I][i]);
+								}
 								(std::make_index_sequence<sizeof...(require_idxs) - 1>{}))
 								{
 									func(
@@ -1559,7 +1559,7 @@ namespace kawa
 			usize work_gouprs,
 			dyn_array<task_handle>& out_handles,
 			Fn&& func
-		){
+		) {
 			auto getters = std::make_tuple(
 				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(
 					*this
@@ -1591,9 +1591,9 @@ namespace kawa
 						, policy
 					)
 				);
-			}		
+			}
 		}
-		
+
 		template<typename Fn>
 		void on_construct(Fn&& func)
 		{
@@ -1660,7 +1660,7 @@ namespace kawa
 			if (!alive(from) || !alive(to))
 				return;
 
-			for (auto& s : _storages.values	)
+			for (auto& s : _storages.values)
 			{
 				if (s.contains(from))
 				{
@@ -1745,7 +1745,7 @@ namespace kawa
 		template<typename T>
 		component_storage& _lazy_get_storage() noexcept
 		{
-			constexpr auto hash = type_hash<T>	;
+			constexpr auto hash = type_hash<T>;
 
 			if (auto v = _storages.try_get(hash))
 			{
@@ -1755,7 +1755,7 @@ namespace kawa
 			{
 				return _storages.insert(hash, construct_tag<T>{}, _cfg.max_entity_count);
 			}
-		}	
+		}
 
 		template<typename T>
 		broadcaster<component_construct_event<T>>& component_construct_broadcaster() noexcept
@@ -1822,7 +1822,7 @@ namespace kawa
 			entity_id* data = nullptr;
 			u32 _size = 0;
 			u32 _cursor = 0;
-		};		
+		};
 
 		hash_map<component_storage> _storages;
 		broadcaster<entity_added_signal> entity_added_broadcaster;
