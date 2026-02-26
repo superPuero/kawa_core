@@ -43,7 +43,9 @@ namespace kawa
 
 	using f32 = float;
 	using f64 = double;
-					
+				
+	using byte = std::byte;
+
 	using string = std::string;
 	using string_view = std::string_view;
 

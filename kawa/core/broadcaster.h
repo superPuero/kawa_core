@@ -55,36 +55,49 @@ namespace kawa
 			broadcaster& mgr;
 		};
 
-		using mem_fn_container = sized_any<32>;
+		using callback_container = sized_any<32>;
 
 		struct _listner_backend
 		{
-			using recieve_invoke_fn_t = void(void*, mem_fn_container&, const message_t& msg);
+			using recieve_invoke_fn_t = void(void*, callback_container&, const message_t& msg);
 
-			void* value_ptr = nullptr;
-			mem_fn_container member_ptr;
+			void* obejct_ptr_for_member_invoke = nullptr;
+			callback_container container;
 			recieve_invoke_fn_t* recieve_invoke_fn = nullptr;
 
 			void recieve(const message_t& msg) noexcept
 			{
-				recieve_invoke_fn(value_ptr, member_ptr, msg);
+				recieve_invoke_fn(obejct_ptr_for_member_invoke, container, msg);
 			}
 		};
 
 		template<typename T>
-		void subscribe(T& val, void(T::* mem_ptr)(const message_t&)) noexcept
+		void subscribe(T& object, void(T::* mem_ptr)(const message_t&)) noexcept
 		{
 			auto& d = _listners.emplace_back();
 			using m_ptr = decltype(mem_ptr);
 
-			d.member_ptr.refresh<m_ptr>(mem_ptr);
+			d.container.template refresh<m_ptr>(mem_ptr);
 			d.recieve_invoke_fn =
-				+[](void* value_ptr, mem_fn_container& mem_p, const message_t& msg)
+				+[](void* value_ptr, callback_container& mem_p, const message_t& msg)
 				{
 					(static_cast<T*>(value_ptr)->*mem_p.unwrap<m_ptr>())(msg);
 				};
-			d.value_ptr = &val;
+			d.obejct_ptr_for_member_invoke = &object;
 		}
+		template<std::invocable<const message_t&> Fn>
+		void subscribe(Fn&& func) noexcept
+		{
+			auto& d = _listners.emplace_back();
+
+			d.container.template refresh<Fn>(kw_fwd(func));
+			d.recieve_invoke_fn =
+				+[](void* value_ptr, callback_container& mem_p, const message_t& msg)
+				{
+					mem_p.unwrap<Fn>()(msg);
+				};
+		}
+
 
 		template<typename value_t>
 		bool try_unsubscribe(const value_t* ptr) noexcept

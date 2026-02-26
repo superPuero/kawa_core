@@ -168,4 +168,4 @@ namespace kawa
 }
 
 
-#endif KAWA_TASK_MANAGER
+#endif

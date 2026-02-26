@@ -12,6 +12,23 @@ namespace kawa
 {
 	enum entity_id : u64 { nullent = std::numeric_limits<u64>::max() };
 
+	struct with_entity_id
+	{
+		template<std::invocable<entity_id> Fn>
+		with_entity_id(Fn&& fn)
+			: func(kw_fwd(fn))
+		{
+
+		}
+
+		void invoke(entity_id id)
+		{
+			func(id);
+		}
+
+		std::function<void(entity_id)> func;
+	};
+
 	static bool is_valid(entity_id id) noexcept
 	{
 		return id != nullent;
@@ -26,11 +43,28 @@ namespace kawa
 
 		}
 
+		entity_view(entity_id entity)
+			: storage(std::bit_cast<entity_id*>(entity))
+			, count(~((u64)0))
+		{
+
+		}
+
 		entity_view(dyn_array<entity_id>& arr)
 			: storage(arr.data())
 			, count(arr.size())
 		{
 
+		}
+
+		bool inplace_unary() const noexcept
+		{
+			return count == ~((u64)0);
+		}
+
+		entity_id get_unary() const noexcept
+		{
+			return std::bit_cast<entity_id>(storage);
 		}
 
 		entity_id* begin() const noexcept
@@ -47,9 +81,15 @@ namespace kawa
 		u64 count = 0;
 	};
 
+	enum class query_sync_policy
+	{
+		no_sync,
+		sync
+	};
+
 	struct component_info
 	{
-		type_info type_info;
+		type_info& type_info;
 		void* value_ptr;
 	};
 
@@ -198,7 +238,9 @@ namespace kawa
 
 	struct component_storage : indirect_array_base
 	{
-		lifetime_vtable _vtable;
+		lifetime_vtable* _vtable;
+
+		unique<std::mutex> _mutex;
 
 		_opaque_callback_wrap on_construct_callback;
 		_opaque_callback_wrap on_destruct_callback;
@@ -209,6 +251,7 @@ namespace kawa
 		template<typename T>
 		component_storage(construct_tag<T>, usize capacity)
 		{
+			_mutex = std::make_unique<std::mutex>();
 			refresh<T>(capacity);
 		}
 
@@ -217,6 +260,8 @@ namespace kawa
 			if (this != &other)
 			{
 				release();
+
+				_mutex = std::make_unique<std::mutex>();
 
 				_vtable = other._vtable;
 				_capacity = other._capacity;
@@ -236,7 +281,7 @@ namespace kawa
 
 				for (auto e : other)
 				{
-					_vtable.copy_ctor_offset(other._storage, e, _storage, e);
+					_vtable->copy_ctor_offset(other._storage, e, _storage, e);
 				}
 			}
 
@@ -254,6 +299,7 @@ namespace kawa
 			{
 				release();
 
+				_mutex = std::make_unique<std::mutex>();
 				_vtable = other._vtable;
 				_capacity = other._capacity;
 				_occupied = other._occupied;
@@ -266,7 +312,7 @@ namespace kawa
 				ctor_broadcaster = std::move(other.ctor_broadcaster);
 				dtor_broadcaster = std::move(other.dtor_broadcaster);
 
-				other._vtable.release();
+				other._vtable = nullptr;
 				other.release();
 			}
 
@@ -288,7 +334,7 @@ namespace kawa
 		{
 			release();
 
-			_vtable.refresh<T>();
+			_vtable = &lifetime_vtable::get<T>();
 			ctor_broadcaster.refresh<T>();
 			dtor_broadcaster.refresh<T>();
 
@@ -299,7 +345,7 @@ namespace kawa
 
 		void _allocate()
 		{
-			_storage = (u8*)::operator new(_capacity * _vtable.type_info.size, std::align_val_t{ _vtable.type_info.alignment });
+			_storage = (u8*)::operator new(_capacity * _vtable->type_info.size, std::align_val_t{ _vtable->type_info.alignment });
 			_mask = new bool[_capacity] {};
 			_indirect_map = new usize[_capacity]{};
 			_reverse_indirect_map = new usize[_capacity]{};
@@ -307,14 +353,14 @@ namespace kawa
 
 		void release() noexcept
 		{
-			if (_vtable.type_info)
+			if (_vtable)
 			{
 				for (auto i : *(indirect_array_base*)this)
 				{
 					_destruct_try_callback(i);
 				}
 
-				::operator delete(_storage, _vtable.type_info.size * _capacity, std::align_val_t{ _vtable.type_info.alignment });
+				::operator delete(_storage, std::align_val_t{ _vtable->type_info.alignment });
 
 				_storage = nullptr;
 
@@ -323,7 +369,7 @@ namespace kawa
 				delete[] _reverse_indirect_map;
 				_occupied = 0;
 
-				_vtable.release();
+				_vtable = nullptr;
 
 				on_construct_callback.release();
 				on_destruct_callback.release();
@@ -335,33 +381,33 @@ namespace kawa
 		{
 			auto out = new (reinterpret_cast<T*>(_storage) + index) T(std::forward<Args>(args)...);
 
-			ctor_broadcaster.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
-			on_construct_callback.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
+			ctor_broadcaster.try_invoke(index, (void*)((u8*)_storage + index * _vtable->type_info.size));
+			on_construct_callback.try_invoke(index, (void*)((u8*)_storage + index * _vtable->type_info.size));
 
 			return *out;
 		}
 
 		void _copy_try_callback(usize from, usize to)
 		{
-			_vtable.copy_ctor_offset(_storage, from, _storage, to);
+			_vtable->copy_ctor_offset(_storage, from, _storage, to);
 
-			on_construct_callback.try_invoke(to, (void*)((u8*)_storage + to * _vtable.type_info.size));
+			on_construct_callback.try_invoke(to, (void*)((u8*)_storage + to * _vtable->type_info.size));
 		}
 
 		void _move_try_callback(usize from, usize to)
 		{
-			_vtable.move_ctor_offset(_storage, from, _storage, to);
+			_vtable->move_ctor_offset(_storage, from, _storage, to);
 
-			on_construct_callback.try_invoke(to, (void*)((u8*)_storage + to * _vtable.type_info.size));
+			on_construct_callback.try_invoke(to, (void*)((u8*)_storage + to * _vtable->type_info.size));
 		}
 
 		void _destruct_try_callback(usize index)
 		{
-			dtor_broadcaster.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
+			dtor_broadcaster.try_invoke(index, (void*)((u8*)_storage + index * _vtable->type_info.size));
 
-			on_destruct_callback.try_invoke(index, (void*)((u8*)_storage + index * _vtable.type_info.size));
+			on_destruct_callback.try_invoke(index, (void*)((u8*)_storage + index * _vtable->type_info.size));
 
-			_vtable.dtor_offset(_storage, index);
+			_vtable->dtor_offset(_storage, index);
 		}
 
 		template<typename Fn>
@@ -379,7 +425,7 @@ namespace kawa
 		template<typename T, typename...Args>
 		T& emplace(usize index, Args&&...args) noexcept
 		{
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			kw_assert(index < _capacity);
 
 			_refresh_init(index);
@@ -429,7 +475,7 @@ namespace kawa
 		template<typename T>
 		T& get(usize index) noexcept
 		{
-			kw_assert_msg(_vtable.type_info.is<T>(), "got: {} expected: {}", type_name<T>, _vtable.type_info.name);
+			kw_assert_msg(_vtable->type_info.is<T>(), "got: {} expected: {}", type_name<T>, _vtable->type_info.name);
 			kw_assert(index < _capacity);
 			kw_assert(_mask[index]);
 
@@ -439,7 +485,7 @@ namespace kawa
 		template<typename T>
 		const T& get(usize index) const noexcept
 		{
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			kw_assert(index < _capacity);
 			kw_assert(_mask[index]);
 
@@ -450,7 +496,7 @@ namespace kawa
 		T* try_get(usize index) noexcept
 		{
 			kw_assert(index < _capacity);
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 
 			if (_mask[index])
 			{
@@ -464,7 +510,7 @@ namespace kawa
 		const T* try_get(usize index) const noexcept
 		{
 			kw_assert(index < _capacity);
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 
 			if (_mask[index])
 			{
@@ -513,6 +559,15 @@ namespace kawa
 			return *(indirect_array_base*)this;
 		}
 
+		void lock() noexcept
+		{
+			_mutex->lock();
+		}
+
+		void unlock() noexcept
+		{
+			_mutex->unlock();
+		}
 	};
 
 	struct entity_destroyed_signal
@@ -691,6 +746,8 @@ namespace kawa
 				}
 
 				memcpy(main.data(), view.storage, view.count * sizeof(entity_id));
+
+				return *this;
 			}
 
 			self_t& reset()
@@ -791,8 +848,18 @@ namespace kawa
 			if (is_valid(id))
 			{
 				_entries.emplace(id);
-				((emplace<Args>(id, std::forward<Args>(args))), ...);
+				((add(id, std::forward<Args>(args))), ...);
 			}
+
+			return id;
+		}
+
+		template<typename Fn>
+		entity_id entity_with(Fn&& func) noexcept
+		{
+			entity_id id = entity();
+
+			kw_fwd(func)(id);
 
 			return id;
 		}
@@ -810,10 +877,7 @@ namespace kawa
 		};
 
 		template<typename T>
-		struct _not_entity_id : std::true_type {};
-
-		template<>
-		struct _not_entity_id<entity_id> : std::false_type {};
+		struct _not_entity_id : std::negation<std::is_same<entity_id, T>> {};
 
 		template<typename Fn>
 		struct query_traits
@@ -836,146 +900,316 @@ namespace kawa
 				{
 					if (s.contains(e))
 					{
-						info_func((entity_id)e, component_info{ s._vtable.type_info, ((u8*)s._storage) + s._vtable.type_info.size * e });
-					}
-				}
-			}
-		}
-
-		template<std::invocable<entity_id, component_info> Fn>
-		void query_info(const entity_view& view, Fn&& info_func)
-		{
-			for (auto e : view)
-			{
-				for (auto& s : _storages.values)
-				{
-					if (s.contains(e))
-					{
-						info_func(e, component_info{ s._vtable.type_info, ((u8*)s._storage) + s._vtable.type_info.size * e });
+						info_func((entity_id)e, component_info{ s._vtable->type_info, ((u8*)s._storage) + s._vtable->type_info.size * e });
 					}
 				}
 			}
 		}
 
 		template<std::invocable<component_info> Fn>
-		void query_info_with(entity_id e, Fn&& info_func)
+		void query_info_with(const entity_view& view, Fn&& info_func)
 		{
-			for (auto& s : _storages.values)
+			if (view.inplace_unary())
 			{
-				if (s.contains(e))
+				entity_id id = view.get_unary();
+				query_info_with({ &id, 1 }, kw_fwd(info_func));
+			}
+			else
+			{
+				for (auto& s : _storages.values)
 				{
-					info_func(component_info{ s._vtable.type_info, ((u8*)s._storage) + s._vtable.type_info.size * e });
+					for (auto e : view)
+					{
+						if (!s.contains(e)) continue;
+
+						info_func(component_info{ s._vtable->type_info, ((u8*)s._storage) + s._vtable->type_info.size * e });
+					}
 				}
 			}
 		}
 
-
-		template<typename Fn>
-		void query(const entity_view& view, Fn&& func)
+		template<typename...Args, typename Fn>
+		void transaction(Fn&& func)
 		{
-			using q = query_traits<Fn>;
+			auto lock_storages = std::tie(_lazy_get_storage<Args>()...);
 
-			if constexpr (q::has_required_components)
-			{
-				_query_required_impl<Fn,
-					typename q::dirty_args,
-					typename q::clear_args,
-					typename q::clean_require_args
-				>(
-					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					& view,
-					std::forward<Fn>(func)
-				);
-			}
-			else
-			{
-				_query_no_required_impl<Fn,
-					typename q::dirty_args,
-					typename q::clear_args
-				>(
-					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-					& view,
-					std::forward<Fn>(func)
-				);
-			}
+			std::apply([](auto&...v) {std::lock(*v._mutex...); }, lock_storages);
+
+			func();
+
+			std::apply([](auto&...v) {((v.unlock()), ...); }, lock_storages);
 		}
 
 		template<typename Fn>
+		void query_sync(Fn&& func)
+		{
+			query<query_sync_policy::sync>(kw_fwd(func));
+		}
+
+		template<query_sync_policy sync_policy = query_sync_policy::no_sync, typename Fn>
 		void query(Fn&& func)
 		{
 			using q = query_traits<Fn>;
 
-			if constexpr (q::has_required_components)
+			query_infer<Fn,
+				typename q::dirty_args,
+				typename q::clean_require_args,
+				sync_policy
+			>(
+				std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
+				std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
+				std::forward<Fn>(func)
+			);
+		}
+
+
+		template<
+			typename Fn,
+			typename dirty_args_tuple,
+			typename require_tuple,
+			query_sync_policy sync_policy,
+			usize...args_idxs,
+			usize...require_idxs
+		>
+		void query_infer(
+			std::index_sequence<args_idxs...>,
+			std::index_sequence<require_idxs...>,
+			Fn&& func
+		) {
+			auto getters = std::make_tuple(
+				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(
+					*this
+				)()...
+			);
+
+			auto lock_storages = std::tie(_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...);
+
+			array<component_storage*, sizeof...(require_idxs)> required_storages = {
+				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
+			};
+
+			if constexpr (sync_policy == query_sync_policy::sync)
 			{
-				_query_required_impl<Fn,
+				std::apply([](auto&...v) {std::lock(*v._mutex...); }, lock_storages);
+			}
+
+			if constexpr (sizeof...(require_idxs))
+			{
+				usize driver_index = 0;
+
+				for (usize i = 0; i < required_storages.size(); i++)
+				{
+					if (required_storages[i]->_occupied <
+						required_storages[driver_index]->_occupied)
+					{
+						driver_index = i;
+					}
+				}
+
+				component_storage& driver = *required_storages[driver_index];
+
+				required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
+
+				array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
+
+				for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
+				{
+					required_storage_masks[i] = required_storages[i]->_mask;
+				}
+
+				query_impl<Fn, required_storage_masks.size(), args_idxs...>(kw_fwd(func), entity_view{ (entity_id*)driver._indirect_map, driver.occupied() }, getters, required_storage_masks);
+			}
+			else
+			{
+				query_impl<Fn, 0, args_idxs...>(kw_fwd(func), entity_view{ (entity_id*)_entries._indirect_map, _entries.occupied() }, getters, array<bool*, 0>{});
+			}
+
+
+			if constexpr (sync_policy == query_sync_policy::sync)
+			{
+				// unlock tables
+				std::apply([](auto&...v) {((v.unlock()), ...); }, lock_storages);
+			}
+		}
+
+		template<
+			typename Fn,
+			usize sz,
+			usize...args_idxs
+		>
+		void query_impl(
+			Fn&& func,
+			const entity_view& driver_view,
+			auto& getters,
+			const array<bool*, sz>& require_masks
+		)
+		{
+			for (auto i : driver_view)
+			{
+				if constexpr (sz)
+				{
+					if ([&]<usize...I>(std::index_sequence<I...>) {
+						return (... && require_masks[I][i]);
+					}(std::make_index_sequence<sz>{}))
+					{
+						func(
+							std::get<args_idxs>(getters).get(i)...
+						);
+					}
+				}
+				else
+				{
+					func(
+						std::get<args_idxs>(getters).get(i)...
+					);
+				}
+			}
+		}
+
+
+		template<typename Fn>
+		void query_with(const entity_view& view, Fn&& func)
+		{
+			using q = query_traits<Fn>;
+
+			entity_id unary_id = view.get_unary();
+			entity_view in_view = view.inplace_unary() ? entity_view(&unary_id, 1) : view;
+
+			query_with_infer<Fn,
+				typename q::dirty_args,
+				typename q::clear_args,
+				typename q::clean_require_args
+			>(
+				std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
+				std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
+				in_view,
+				std::forward<Fn>(func)
+			);
+			/*if constexpr (q::has_required_components)
+			{
+				_query_with_required_impl<Fn,
 					typename q::dirty_args,
 					typename q::clear_args,
 					typename q::clean_require_args
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
 					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					nullptr,
+					in_view,
 					std::forward<Fn>(func)
 				);
 			}
 			else
 			{
-				_query_no_required_impl<Fn,
+				_query_with_no_required_impl<Fn,
 					typename q::dirty_args,
 					typename q::clear_args
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-					nullptr,
+					in_view,
 					std::forward<Fn>(func)
 				);
-			}
+			}*/
 		}
 
-		template<typename FilterFn>
-		void query_filter(const entity_view& view, dyn_array<entity_id>& out, FilterFn&& func)
-		{
-			using q = query_traits<FilterFn>;
+		template<
+			typename Fn,
+			typename dirty_args_tuple,
+			typename args_tuple,
+			typename require_tuple,
+			usize...args_idxs,
+			usize...require_idxs
+		>
+		void query_with_infer(
+			std::index_sequence<args_idxs...>,
+			std::index_sequence<require_idxs...>,
+			const entity_view& view,
+			Fn&& func
+		) {
+			auto getters = std::make_tuple(
+				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(
+					*this
+				)()...
+			);
 
-			if constexpr (q::has_required_components)
-			{
-				_query_filter_required_impl<FilterFn,
-					typename q::dirty_args,
-					typename q::clear_args,
-					typename q::clean_require_args
-				>(
-					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					& view,
-					out,
-					std::forward<FilterFn>(func)
-				);
-			}
-			else
-			{
+			array<component_storage*, sizeof...(require_idxs)> required_storages = {
+				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
+			};
 
-				if constexpr (std::tuple_size_v<typename q::dirty_args>)
+			if constexpr (sizeof...(require_idxs))
+			{
+				usize driver_index = 0;
+
+				for (usize i = 0; i < required_storages.size(); i++)
 				{
-					_query_filter_no_required_impl<FilterFn,
-						typename q::dirty_args,
-						typename q::clear_args
-					>(
-						std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-						& view,
-						out,
-						std::forward<FilterFn>(func)
-					);
+					if (required_storages[i]->_occupied <
+						required_storages[driver_index]->_occupied)
+					{
+						driver_index = i;
+					}
+				}
+
+				component_storage& driver = *required_storages[driver_index];
+
+				required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
+
+				if (view.count <= driver.occupied())
+				{
+					array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
+
+					for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
+					{
+						required_storage_masks[i] = required_storages[i]->_mask;
+					}
+
+					query_with_impl<Fn, required_storage_masks.size(), args_idxs...>(kw_fwd(func), view, getters, required_storage_masks);
 				}
 				else
 				{
-					if (out.size() < _entries.occupied())
-					{
-						out.resize(_entries.occupied());
-					}
+					array<bool*, sizeof...(require_idxs)> required_storage_masks = {
+						_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()._mask...
+					};
 
-					memcpy(out.data(), _entries._indirect_map, _entries.occupied() * sizeof(entity_id));
+					query_with_impl<Fn, required_storage_masks.size(), args_idxs...>(kw_fwd(func), entity_view{ (entity_id*)driver._indirect_map, driver.occupied() }, getters, required_storage_masks);
+
 				}
+			}
+			else
+			{
+				query_with_impl<Fn, 0, args_idxs...>(kw_fwd(func), view, getters, array<bool*, 0>{});
+			}
+		}
 
+		template<
+			typename Fn,
+			usize sz,
+			usize...args_idxs
+		>
+		void query_with_impl(
+			Fn&& func,
+			const entity_view& driver_view,
+			auto& getters,
+			const array<bool*, sz>& require_masks
+		)
+		{
+			for (auto i : driver_view)
+			{
+				if constexpr (sz)
+				{
+					if ([&]<usize...I>(std::index_sequence<I...>) {
+						return (... && require_masks[I][i]);
+					}(std::make_index_sequence<sz>{}))
+					{
+						func(
+							std::get<args_idxs>(getters).get(i)...
+						);
+					}
+				}
+				else
+				{
+					func(
+						std::get<args_idxs>(getters).get(i)...
+					);
+				}
 			}
 		}
 
@@ -993,7 +1227,6 @@ namespace kawa
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
 					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					nullptr,
 					out,
 					std::forward<FilterFn>(func)
 				);
@@ -1008,7 +1241,6 @@ namespace kawa
 						typename q::clear_args
 					>(
 						std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-						nullptr,
 						out,
 						std::forward<FilterFn>(func)
 					);
@@ -1026,38 +1258,53 @@ namespace kawa
 			}
 		}
 
-
-		template<typename Fn>
-		void query_with(entity_id id, Fn&& func)
+		template<typename FilterFn>
+		void query_filter_with(const entity_view& view, dyn_array<entity_id>& out, FilterFn&& func)
 		{
-			kw_assert(is_valid(id));
-			kw_assert(_entries.contains(id));
+			using q = query_traits<FilterFn>;
 
-			using q = query_traits<Fn>;
+			entity_id unary_id = view.get_unary();
+			entity_view in_view = view.inplace_unary() ? entity_view(&unary_id, 1) : view;
 
 			if constexpr (q::has_required_components)
 			{
-				_query_with_required_impl<Fn,
+				_query_filter_with_required_impl<FilterFn,
 					typename q::dirty_args,
 					typename q::clear_args,
 					typename q::clean_require_args
 				>(
 					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
 					std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
-					id,
-					std::forward<Fn>(func)
+					in_view,
+					out,
+					std::forward<FilterFn>(func)
 				);
 			}
 			else
 			{
-				_query_with_no_required_impl<Fn,
-					typename q::dirty_args,
-					typename q::clear_args
-				>(
-					std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
-					id,
-					std::forward<Fn>(func)
-				);
+
+				if constexpr (std::tuple_size_v<typename q::dirty_args>)
+				{
+					_query_filter_with_no_required_impl<FilterFn,
+						typename q::dirty_args,
+						typename q::clear_args
+					>(
+						std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
+						in_view,
+						out,
+						std::forward<FilterFn>(func)
+					);
+				}
+				else
+				{
+					if (out.size() < _entries.occupied())
+					{
+						out.resize(_entries.occupied());
+					}
+
+					memcpy(out.data(), _entries._indirect_map, _entries.occupied() * sizeof(entity_id));
+				}
+
 			}
 		}
 
@@ -1138,7 +1385,7 @@ namespace kawa
 		{
 			registry& r;
 
-			auto operator()(usize worker_count = 1) const noexcept
+			auto operator()() const noexcept
 			{
 				using CVT = std::remove_reference_t<std::remove_pointer_t<T>>;
 				using CleanT = std::remove_cv_t<CVT>;
@@ -1168,7 +1415,6 @@ namespace kawa
 		>
 		void _query_filter_no_required_impl(
 			std::index_sequence<args_idxs...>,
-			const entity_view* view,
 			dyn_array<entity_id>& out,
 			Fn&& func
 		) {
@@ -1176,30 +1422,13 @@ namespace kawa
 				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(*this)()...
 			);
 
-			if (view)
+			for (auto i : _entries.as_base())
 			{
-				for (auto i : *view)
+				if (std::forward<Fn>(func)(
+					std::get<args_idxs>(getters).get(i)...
+					))
 				{
-					if (std::forward<Fn>(func)(
-						std::get<args_idxs>(getters).get(i)...
-						))
-					{
-						out.emplace_back((entity_id)i);
-					}
-
-				}
-			}
-			else
-			{
-				for (auto i : _entries.as_base())
-				{
-					if (std::forward<Fn>(func)(
-						std::get<args_idxs>(getters).get(i)...
-						))
-					{
-						out.emplace_back((entity_id)i);
-					}
-
+					out.emplace_back((entity_id)i);
 				}
 			}
 		}
@@ -1215,7 +1444,6 @@ namespace kawa
 		void _query_filter_required_impl(
 			std::index_sequence<args_idxs...>,
 			std::index_sequence<require_idxs...>,
-			const entity_view* view,
 			dyn_array<entity_id>& out,
 			Fn&& func
 		) {
@@ -1229,72 +1457,120 @@ namespace kawa
 				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
 			};
 
-			if (view)
+
+			usize driver_index = 0;
+
+			for (usize i = 0; i < required_storages.size(); i++)
 			{
-				array<bool*, sizeof...(require_idxs)> required_storage_masks;
-
-				for (usize i = 0; i < sizeof...(require_idxs); i++)
+				if (required_storages[i]->_occupied <
+					required_storages[driver_index]->_occupied)
 				{
-					required_storage_masks[i] = required_storages[i]->_mask;
-				}
-
-				for (auto i : *view)
-				{
-					if ([&]<usize...I>(std::index_sequence<I...>) {
-						return (... && required_storage_masks[I][i]);
-					}(std::make_index_sequence<sizeof...(require_idxs)>{}))
-					{
-						if (func(
-							std::get<args_idxs>(getters).get(i)...
-						))
-						{
-							out.emplace_back((entity_id)i);
-						}
-					}
-				}
-			}
-			else
-			{
-
-				usize driver_index = 0;
-
-				for (usize i = 0; i < required_storages.size(); i++)
-				{
-					if (required_storages[i]->_occupied <
-						required_storages[driver_index]->_occupied)
-					{
-						driver_index = i;
-					}
-				}
-
-				component_storage& driver = *required_storages[driver_index];
-
-				required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
-
-				array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
-
-				for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
-				{
-					required_storage_masks[i] = required_storages[i]->_mask;
-				}
-
-				for (auto i : driver)
-				{
-					if ([&]<usize...I>(std::index_sequence<I...>) {
-						return (... && required_storage_masks[I][i]);
-					}(std::make_index_sequence<sizeof...(require_idxs) - 1>{}))
-					{
-						if (func(
-							std::get<args_idxs>(getters).get(i)...
-						))
-						{
-							out.emplace_back((entity_id)i);
-						}
-					}
+					driver_index = i;
 				}
 			}
 
+			component_storage& driver = *required_storages[driver_index];
+
+			required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
+
+			array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
+
+			for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
+			{
+				required_storage_masks[i] = required_storages[i]->_mask;
+			}
+
+			for (auto i : driver)
+			{
+				if ([&]<usize...I>(std::index_sequence<I...>) {
+					return (... && required_storage_masks[I][i]);
+				}(std::make_index_sequence<sizeof...(require_idxs) - 1>{}))
+				{
+					if (func(
+						std::get<args_idxs>(getters).get(i)...
+					))
+					{
+						out.emplace_back((entity_id)i);
+					}
+				}
+			}
 		}
+
+		template<
+			typename Fn,
+			typename dirty_args_tuple,
+			typename args_tuple,
+			usize...args_idxs
+		>
+		void _query_filter_with_no_required_impl(
+			std::index_sequence<args_idxs...>,
+			const entity_view& view,
+			dyn_array<entity_id>& out,
+			Fn&& func
+		) {
+			auto getters = std::make_tuple(
+				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(*this)()...
+			);
+
+			for (auto i : view)
+			{
+				if (std::forward<Fn>(func)(
+					std::get<args_idxs>(getters).get(i)...
+					))
+				{
+					out.emplace_back((entity_id)i);
+				}
+			}
+		}
+
+		template<
+			typename Fn,
+			typename dirty_args_tuple,
+			typename args_tuple,
+			typename require_tuple,
+			usize...args_idxs,
+			usize...require_idxs
+		>
+		void _query_filter_with_required_impl(
+			std::index_sequence<args_idxs...>,
+			std::index_sequence<require_idxs...>,
+			const entity_view& view,
+			dyn_array<entity_id>& out,
+			Fn&& func
+		) {
+			auto getters = std::make_tuple(
+				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(
+					*this
+				)()...
+			);
+
+			array<component_storage*, sizeof...(require_idxs)> required_storages = {
+				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
+			};
+
+			array<bool*, sizeof...(require_idxs)> required_storage_masks;
+
+			for (usize i = 0; i < sizeof...(require_idxs); i++)
+			{
+				required_storage_masks[i] = required_storages[i]->_mask;
+			}
+
+			for (auto i : view)
+			{
+				if ([&]<usize...I>(std::index_sequence<I...>) {
+					return (... && required_storage_masks[I][i]);
+				}(std::make_index_sequence<sizeof...(require_idxs)>{}))
+				{
+					if (func(
+						std::get<args_idxs>(getters).get(i)...
+					))
+					{
+						out.emplace_back((entity_id)i);
+					}
+				}
+			}
+		}
+
 
 		template<
 			typename Fn,
@@ -1304,16 +1580,20 @@ namespace kawa
 		>
 		void _query_with_no_required_impl(
 			std::index_sequence<args_idxs...>,
-			entity_id i,
+			const entity_view& view,
 			Fn&& func
 		) {
 			auto getters = std::make_tuple(
 				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(*this)()...
 			);
 
-			std::forward<Fn>(func)(
-				std::get<args_idxs>(getters).get(i)...
-				);
+			for (auto i : view)
+			{
+				std::forward<Fn>(func)(
+					std::get<args_idxs>(getters).get(i)...
+					);
+			}
+
 		}
 
 		template<
@@ -1327,7 +1607,7 @@ namespace kawa
 		void _query_with_required_impl(
 			std::index_sequence<args_idxs...>,
 			std::index_sequence<require_idxs...>,
-			entity_id i,
+			const entity_view& view,
 			Fn&& func
 		) {
 			auto getters = std::make_tuple(
@@ -1336,17 +1616,29 @@ namespace kawa
 				)()...
 			);
 
+			//array<component_storage*, sizeof...(require_idxs)> required_storages = {
+			//	&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
+			//};
+
 			array<bool*, sizeof...(require_idxs)> required_storage_masks = {
 				_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()._mask...
 			};
 
-			if ([&]<usize...I>(std::index_sequence<I...>) {
-				return (... && required_storage_masks[I][i]);
-			}(std::make_index_sequence<sizeof...(require_idxs)>{}))
+			/*for (usize i = 0; i < sizeof...(require_idxs); i++)
 			{
-				func(
-					std::get<args_idxs>(getters).get(i)...
-				);
+				required_storage_masks[i] = required_storages[i]->_mask;
+			}*/
+
+			for (auto i : view)
+			{
+				if ([&]<usize...I>(std::index_sequence<I...>) {
+					return (... && required_storage_masks[I][i]);
+				}(std::make_index_sequence<sizeof...(require_idxs)>{}))
+				{
+					func(
+						std::get<args_idxs>(getters).get(i)...
+					);
+				}
 			}
 		}
 
@@ -1358,29 +1650,17 @@ namespace kawa
 		>
 		void _query_no_required_impl(
 			std::index_sequence<args_idxs...>,
-			const entity_view* view,
 			Fn&& func
 		) {
 			auto getters = std::make_tuple(
 				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(*this)()...
 			);
-			if (view)
+
+			for (auto i : _entries.as_base())
 			{
-				for (auto i : *view)
-				{
-					std::forward<Fn>(func)(
-						std::get<args_idxs>(getters).get(i)...
-						);
-				}
-			}
-			else
-			{
-				for (auto i : _entries.as_base())
-				{
-					std::forward<Fn>(func)(
-						std::get<args_idxs>(getters).get(i)...
-						);
-				}
+				std::forward<Fn>(func)(
+					std::get<args_idxs>(getters).get(i)...
+					);
 			}
 		}
 
@@ -1395,7 +1675,6 @@ namespace kawa
 		void _query_required_impl(
 			std::index_sequence<args_idxs...>,
 			std::index_sequence<require_idxs...>,
-			const entity_view* view,
 			Fn&& func
 		) {
 			auto getters = std::make_tuple(
@@ -1408,61 +1687,37 @@ namespace kawa
 				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
 			};
 
-			if (view)
+			usize driver_index = 0;
+
+			for (usize i = 0; i < required_storages.size(); i++)
 			{
-				array<bool*, sizeof...(require_idxs)> required_storage_masks;
-
-				for (usize i = 0; i < sizeof...(require_idxs); i++)
+				if (required_storages[i]->_occupied <
+					required_storages[driver_index]->_occupied)
 				{
-					required_storage_masks[i] = required_storages[i]->_mask;
-				}
-
-				for (auto i : *view)
-				{
-					if ([&]<usize...I>(std::index_sequence<I...>) {
-						return (... && required_storage_masks[I][i]);
-					}(std::make_index_sequence<sizeof...(require_idxs)>{}))
-					{
-						func(
-							std::get<args_idxs>(getters).get(i)...
-						);
-					}
+					driver_index = i;
 				}
 			}
-			else
+
+			component_storage& driver = *required_storages[driver_index];
+
+			required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
+
+			array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
+
+			for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
 			{
-				usize driver_index = 0;
+				required_storage_masks[i] = required_storages[i]->_mask;
+			}
 
-				for (usize i = 0; i < required_storages.size(); i++)
+			for (auto i : driver)
+			{
+				if ([&]<usize...I>(std::index_sequence<I...>) {
+					return (... && required_storage_masks[I][i]);
+				}(std::make_index_sequence<sizeof...(require_idxs) - 1>{}))
 				{
-					if (required_storages[i]->_occupied <
-						required_storages[driver_index]->_occupied)
-					{
-						driver_index = i;
-					}
-				}
-
-				component_storage& driver = *required_storages[driver_index];
-
-				required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
-
-				array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
-
-				for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
-				{
-					required_storage_masks[i] = required_storages[i]->_mask;
-				}
-
-				for (auto i : driver)
-				{
-					if ([&]<usize...I>(std::index_sequence<I...>) {
-						return (... && required_storage_masks[I][i]);
-					}(std::make_index_sequence<sizeof...(require_idxs) - 1>{}))
-					{
-						func(
-							std::get<args_idxs>(getters).get(i)...
-						);
-					}
+					func(
+						std::get<args_idxs>(getters).get(i)...
+					);
 				}
 			}
 		}
@@ -1575,7 +1830,7 @@ namespace kawa
 			{
 				out_handles.emplace_back(
 					mgr.schedule(
-						[=]()
+						[=, this]()
 						{
 							auto map = _entries._indirect_map;
 
@@ -1617,7 +1872,15 @@ namespace kawa
 		template<typename T>
 		T& add(entity_id index, T&& v)
 		{
-			return _lazy_get_storage<std::remove_cvref_t<T>>().template emplace<std::remove_cvref_t<T>>(index, std::forward<T>(v));
+			if constexpr (std::is_same_v<with_entity_id, T>)
+			{
+				v.invoke(index);
+				return v;
+			}
+			else
+			{
+				return _lazy_get_storage<std::remove_cvref_t<T>>().template emplace<std::remove_cvref_t<T>>(index, std::forward<T>(v));
+			}
 		}
 
 		template<typename T, typename...Args>
@@ -1698,23 +1961,11 @@ namespace kawa
 			return _lazy_get_storage<T>().template get<T>(e);
 		}
 
-		//template<typename...Args>
-		//stable_tuple<Args&...> get(entity_id e)
-		//{
-		//	return kawa::forward_as_tuple(_lazy_get_storage<Args>().template get<Args>(e)...);
-		//}
-
 		template<typename T>
 		T* try_get(entity_id e) noexcept
 		{
 			return _lazy_get_storage<T>().template try_get<T>(e);
 		}
-
-		//template<typename...Args>
-		//stable_tuple<Args*...> try_get(entity_id e)
-		//{
-		//	return kawa::forward_as_tuple(_lazy_get_storage<Args>().template try_get<Args>(e)...);
-		//}
 
 		void destroy(entity_id id) noexcept
 		{
@@ -1758,75 +2009,18 @@ namespace kawa
 		}
 
 		template<typename T>
-		broadcaster<component_construct_event<T>>& component_construct_broadcaster() noexcept
+		broadcaster<component_construct_event<T>>& construct_broadcaster() noexcept
 		{
 			return _lazy_get_storage<T>().ctor_broadcaster.bcaster.template unwrap<broadcaster<component_construct_event<T>>>();
 		}
 
 		template<typename T>
-		broadcaster<component_destruct_event<T>>& component_destruct_broadcaster() noexcept
+		broadcaster<component_destruct_event<T>>& destruct_broadcaster() noexcept
 		{
 			return _lazy_get_storage<T>().dtor_broadcaster.bcaster.template unwrap<broadcaster<component_destruct_event<T>>>();
 		}
 
-		struct _entity_set
-		{
-			_entity_set(usize sz)
-				: _size(sz)
-			{
-				data = new entity_id[_size];
-			}
-
-			_entity_set(_entity_set&& other)
-				: _size(other._size)
-				, data(other.data)
-			{
-				data = nullptr;
-			}
-
-			_entity_set(const _entity_set& other)
-				: _size(other._size)
-			{
-				data = new entity_id[_size];
-			}
-
-			~_entity_set()
-			{
-				if (data)
-				{
-					delete[] data;
-					data = nullptr;
-				}
-			}
-
-			void reset() noexcept
-			{
-				_cursor = 0;
-			}
-
-			void push(entity_id id)
-			{
-				data[_cursor++] = id;
-			}
-
-			entity_id* begin() noexcept
-			{
-				return data;
-			}
-
-			entity_id* end() noexcept
-			{
-				return data + _cursor;
-			}
-
-			entity_id* data = nullptr;
-			u32 _size = 0;
-			u32 _cursor = 0;
-		};
-
 		hash_map<component_storage> _storages;
-		broadcaster<entity_added_signal> entity_added_broadcaster;
-		broadcaster<entity_destroyed_signal> entity_destroyed_broadcaster;
 		indirect_array<entity_id> _free_list;
 		indirect_array<entity_id> _entries;
 		u64 _id_counter = 0;

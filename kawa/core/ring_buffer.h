@@ -50,4 +50,4 @@ namespace kawa
 	};
 }
 
-#endif KAWA_RING_BUFFER
+#endif

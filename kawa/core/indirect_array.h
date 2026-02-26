@@ -1,6 +1,7 @@
 #ifndef KAWA_INDIRECT_ARRAY
 #define KAWA_INDIRECT_ARRAY
 
+#include <new>
 #include "core_types.h"
 #include "any.h"
 
@@ -27,8 +28,8 @@ namespace kawa
 		usize _capacity = 0;
 
 		bool* _mask = nullptr;
-		usize* _indirect_map = nullptr;
-		usize* _reverse_indirect_map = nullptr;
+		usize* _indirect_map = nullptr; // dense
+		usize* _reverse_indirect_map = nullptr; // sparse
 		usize _occupied = 0;
 	};
 
@@ -141,7 +142,7 @@ namespace kawa
 					reinterpret_cast<T*>(_storage)[_indirect_map[i]].~T();
 				}
 
-				::operator delete(_storage, _capacity * sizeof(T), std::align_val_t{ alignof(T) });
+				::operator delete(_storage, std::align_val_t{ alignof(T) });
 
 				_storage = nullptr;
 

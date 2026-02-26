@@ -1,27 +1,52 @@
-<html>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="search.css">
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Search</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="search.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
 <body>
-    <input type="text" name="name-input"
-           placeholder="Type name to add...">
+    <div class="app-container">
+        <div class="header">
+            <h1>Game DB</h1>
+            <p>kawa-db</p>
+        </div>
 
-    <button hx-post="/insert-name"
-            hx-include="[name='name-input']"
-            hx-swap="none"
-            hx-on::after-request="
-                document.body.dispatchEvent(new Event('refresh_search'))
-                document.getElementsByName('name-input')[0].value = ''
-            ">
-        insert
-    </button>
+        <button hx-post="/genres"
+                hx-get="/get-genres"                
+                hx-target="#genres-list"
+                hx-on::after-request="
+                    document.getElementsByName('name-input')[0].value = ''
+                ">
+            Genres
+        </button>
 
-    <input type="text" name="query"
-           hx-get="/search-name"
-           hx-trigger="input changed delay:200ms, refresh_search from:body"
-           hx-target="#results"
-           placeholder="Type name to search...">
+        <ul id="genres-list"></ul>
 
-    <ul id="results"></ul>
+        <button hx-post="/platforms"
+                hx-get="/get-platforms"
+                hx-include="[name='name-input']"
+                hx-target="#platforms-list"
+                hx-on::after-request="
+             document.getElementsByName('name-input')[0].value = ''
+         ">
+            Platforms
+        </button>
+
+        <ul id="platforms-list"></ul>
+
+
+        <input type="text" name="query"
+               hx-get="/search-query"
+               hx-include="#genre-select"
+               hx-trigger="input changed delay:200ms, refresh_search from:body"
+               hx-target="#results"
+               placeholder="Type a game title to search...">
+
+        <ul id="results"></ul>
+    </div>
 </body>
 </html>

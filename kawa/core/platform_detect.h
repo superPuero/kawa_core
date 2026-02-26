@@ -42,4 +42,4 @@
 	#define kw_platform unknown
 #endif
 
-#endif KAWA_PLATFORM_DETECT
+#endif

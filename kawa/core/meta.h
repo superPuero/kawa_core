@@ -203,42 +203,6 @@ namespace kawa
 	template<typename T>
 	struct function_traits<T> : function_traits<decltype(&T::operator())> {};
 
-	template<typename RetTy, typename...ArgTy>
-	struct function_traits<RetTy(*)(ArgTy...) noexcept>
-	{
-		using return_type = RetTy;
-		using args_tuple = typename std::tuple<ArgTy...>;
-		template<usize i>
-		using arg_at = typename std::tuple_element_t<i, args_tuple>;
-	};
-
-	template<typename RetTy, typename...ArgTy>
-	struct function_traits<RetTy(&)(ArgTy...) noexcept>
-	{
-		using return_type = RetTy;
-		using args_tuple = typename std::tuple<ArgTy...>;
-		template<usize i>
-		using arg_at = typename std::tuple_element_t<i, args_tuple>;
-	};
-
-	template<typename RetTy, typename...ArgTy>
-	struct function_traits<RetTy(ArgTy...) noexcept>
-	{
-		using return_type = RetTy;
-		using args_tuple = typename std::tuple<ArgTy...>;
-		template<usize i>
-		using arg_at = typename std::tuple_element_t<i, args_tuple>;
-	};
-
-	template<typename RetTy, typename ObjTy, typename...ArgTy>
-	struct function_traits<RetTy(ObjTy::*)(ArgTy...) const noexcept>
-	{
-		using return_type = RetTy;
-		using args_tuple = typename std::tuple<ArgTy...>;
-		template<usize i>
-		using arg_at = typename std::tuple_element_t<i, args_tuple>;
-	};
-
 	template<typename Tuple, usize start, usize end, typename = void>
 	struct sub_tuple
 	{
@@ -278,4 +242,4 @@ namespace kawa
 	constexpr bool any_of<type, head_t, args_t...> = std::is_same_v<type, head_t> || any_of<type, args_t...>;
 }
 
-#endif KAWA_META
+#endif

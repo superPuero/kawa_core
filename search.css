@@ -1,76 +1,281 @@
-body 
-{
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 10vh;
-    gap: 20px;
-    background: linear-gradient(90deg, #333 10%, #333 70%);
-    font-family: 'Inter', sans-serif;
-    min-height: 100vh;
+:root {
+    /* Muted Psychedelic Neon Colors */
+    --bg-main: #0d001a;
+    --bg-card: rgba(26, 0, 51, 0.65);
+    --text-main: #e0f7fa;
+    --text-muted: #b2ebf2;
+    --accent: #ff00ff;
+    --accent-hover: #00ffff;
+    --border: #39ff14;
 }
 
+/* --- Animations --- */
+@keyframes subtle-gradient {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+@keyframes slideIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--accent);
+    border-radius: 10px;
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-hover);
+    }
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    /* Using your Space Grotesk font! */
+    font-family: 'Space Grotesk', sans-serif;
+    background: linear-gradient(270deg, #1a0033, #000022, #0d1a00, #1a1a00);
+    background-size: 400% 400%;
+    animation: subtle-gradient 15s ease infinite;
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    padding: 3rem 1rem;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* --- Layout mapped exactly to your HTML --- */
+.app-container {
+    width: 100%;
+    max-width: 1000px;
+    background-color: var(--bg-card);
+    backdrop-filter: blur(16px);
+    padding: 2.5rem;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 0, 255, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(0, 255, 255, 0.1);
+    /* Strict grid mapping for your flat HTML structure */
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: auto auto auto auto 1fr;
+    gap: 1rem 2.5rem;
+}
+
+/* 1. Header (Spans across the top) */
+.header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin-bottom: 1rem;
+}
+
+    .header h1 {
+        font-size: 2.8rem;
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+        text-transform: uppercase;
+        color: #fff;
+        text-shadow: 3px 3px 0px rgba(255, 0, 255, 0.8), -2px -2px 0px rgba(0, 255, 255, 0.8);
+        letter-spacing: 2px;
+    }
+
+    .header p {
+        color: var(--accent-hover);
+        font-size: 1.15rem;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+
+/* 2. Sidebar (Left Column) */
 button {
-    width: 200px;
-    font-size: 20px;
-    border: solid;
-    border-radius: 30px;
-    background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.1);
-    outline: none;
+    background: rgba(0, 255, 255, 0.05);
+    color: var(--accent-hover);
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.8rem 1.5rem;
+    border: 2px solid var(--accent-hover);
+    border-radius: 8px;
+    cursor: pointer;
     transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 100%; /* Fill sidebar width */
 }
 
     button:hover {
-        width: 220px; 
-        background: #ffffff;
-        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        background-color: var(--accent-hover);
+        color: #000;
+        box-shadow: 0 0 15px var(--accent-hover);
+        transform: translateY(-2px);
     }
 
+    button:active {
+        transform: translateY(1px);
+    }
+
+    /* Map specific elements to the left column rows */
+    button[hx-post="/genres"] {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+#genres-list {
+    grid-column: 1;
+    grid-row: 3;
+    list-style: none;
+    margin-bottom: 1rem;
+}
+
+button[hx-post="/platforms"] {
+    grid-column: 1;
+    grid-row: 4;
+}
+
+#platforms-list {
+    grid-column: 1;
+    grid-row: 5;
+    list-style: none;
+    align-self: start;
+}
+
+
+/* 3. Main Content (Right Column) */
 input[type="text"] {
-    width: 30%;
-    padding: 15px 25px;
-    font-size: 18px;
-    border: none;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    grid-column: 2;
+    grid-row: 2; /* Aligns with the first button */
+    align-self: start;
+    width: 100%;
+    font-family: inherit;
+    font-size: 1.1rem;
+    padding: 1rem 1.2rem;
+    background-color: rgba(0, 0, 0, 0.4);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
     outline: none;
     transition: all 0.3s ease;
 }
 
+    input[type="text"]::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+    }
+
     input[type="text"]:focus {
-        width: 35%;
-        background: #ffffff;
-        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        border-color: var(--accent-hover);
+        background-color: rgba(0, 0, 0, 0.7);
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+        transform: translateY(-2px);
     }
 
 #results {
     list-style: none;
-    padding: 0;
-    margin-top: 20px;
-    width: 100%;
-    max-width: 400px;
-    background: white;
-    border-radius: 15px;
-    overflow: hidden; /* Clips corners of children */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    grid-column: 2;
+    grid-row: 3 / 6; /* Spans down the rest of the right side */
+    align-self: start;
 }
 
-    /* Assuming your server returns <li> items */
+    /* HTMX Injected Result Items */
     #results li {
-        padding: 15px 20px;
-        border-bottom: 1px solid #eee;
-        color: #333;
-        transition: background 0.2s;
-        cursor: pointer;
+        background: linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(26,0,51,0.4) 100%);
+        padding: 1.2rem;
+        border-radius: 8px;
+        border-left: 4px solid var(--accent);
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: #fff;
+        opacity: 0;
+        transform: translateY(15px);
+        animation: slideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        border-right: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
         #results li:hover {
-            background-color: #f8f9ff;
-            color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 0, 255, 0.2);
+            border-left-color: var(--accent-hover);
         }
 
-        #results li:last-child {
-            border-bottom: none;
+/* --- Mobile Responsiveness --- */
+@media (max-width: 768px) {
+    .app-container {
+        grid-template-columns: 1fr; /* Switch to single column */
+        padding: 1.5rem;
+    }
+
+    /* Stack everything sequentially on mobile */
+    .header, button, #genres-list, #platforms-list, input[type="text"], #results {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+        .header h1 {
+            font-size: 2.2rem;
         }
+}
+
+/* --- HTMX Injected Checkbox Styling (Assuming you generate these inside your lists) --- */
+#genre-select label, .platform-label {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-muted);
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+}
+
+    #genre-select label:hover, .platform-label:hover {
+        border-color: rgba(255, 0, 255, 0.5);
+        color: #fff;
+        background: rgba(255, 0, 255, 0.05);
+    }
+
+/* Hide actual checkboxes if you wrap them in labels */
+#genre-select input[type="checkbox"],
+.platform-checkbox {
+    display: none;
+}
+
+    #genre-select input[type="checkbox"]:checked + label {
+        background: rgba(57, 255, 20, 0.1);
+        color: var(--border);
+        border-color: var(--border);
+        box-shadow: 0 0 10px rgba(57, 255, 20, 0.2) inset;
+    }

@@ -11,6 +11,23 @@
 
 namespace kawa
 {
+    struct reporting_timer
+    {
+        reporting_timer(const string& name)
+            : _name(name)
+            , _start(std::chrono::high_resolution_clock::now())
+        {
+        }
+
+        ~reporting_timer()
+        {
+            kw_info("{}: {}", _name, std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - _start).count() / 1000.f);
+        }
+
+        string _name;
+        std::chrono::time_point<std::chrono::high_resolution_clock> _start;
+    };
+
     struct ansi_codes
     {
         enum class text_color
@@ -49,7 +66,7 @@ namespace kawa
         }
 
         template<typename T>
-        operator T&& () noexcept
+        operator T && () noexcept
         {
             return _::fake_object<T>;
         }
@@ -76,8 +93,8 @@ namespace kawa
         template<usize i>
         consteval bool operator==(const static_string<i>& other) const
         {
-            for (usize i = 0; i < N; ++i)
-                if (value[i] != other.value[i]) return false;
+            for (usize j = 0; j < N; ++j)
+                if (value[j] != other.value[j]) return false;
             return true;
         }
     };
@@ -85,17 +102,17 @@ namespace kawa
     template<usize i>
     static_string(const char(&)[i]) -> static_string<i>;
 
-	inline string read_file(const string& path)
-	{
-		std::ifstream file(path);
+    inline string read_file(const string& path)
+    {
+        std::ifstream file(path);
 
-		kw_verify_msg(file.is_open(), "failed to open file: {}", path);
+        kw_verify_msg(file.is_open(), "failed to open file: {}", path);
 
-		std::ostringstream buffer;
-		buffer << file.rdbuf();  
+        std::ostringstream buffer;
+        buffer << file.rdbuf();
 
-		return buffer.str();
-	}
+        return buffer.str();
+    }
 
     inline dyn_array<u8> read_file_bytes(const string& path)
     {

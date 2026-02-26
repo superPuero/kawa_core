@@ -30,6 +30,13 @@ namespace kawa
 		}
 
 		template<typename T>
+		static lifetime_vtable& get() noexcept
+		{
+			static lifetime_vtable vtable = []() { lifetime_vtable v; v.refresh<T>(); return v; }();
+			return vtable;
+		}
+
+		template<typename T>
 		void refresh()
 		{
 			release();
@@ -155,11 +162,11 @@ namespace kawa
 			{
 				release();
 				_vtable = other._vtable;
-				if (_vtable.type_info)
+				if (_vtable->type_info)
 				{
-					_vtable.move_ctor((void*)other._storage, (void*)_storage);
+					_vtable->move_ctor((void*)other._storage, (void*)_storage);
 				}
-				other._vtable.release();
+				other._vtable = nullptr;
 				other.release();
 			}
 
@@ -178,9 +185,9 @@ namespace kawa
 			{
 				release();
 				_vtable = other._vtable;
-				if (_vtable.type_info)
+				if (_vtable->type_info)
 				{
-					_vtable.copy_ctor((void*)other._storage, (void*)_storage);
+					_vtable->copy_ctor((void*)other._storage, (void*)_storage);
 				}
 			}
 
@@ -194,10 +201,10 @@ namespace kawa
 
 		void release() noexcept
 		{
-			if (_vtable.type_info)
+			if (_vtable)
 			{
-				_vtable.dtor(_storage);
-				_vtable.release();
+				_vtable->dtor(_storage);
+				_vtable = nullptr;
 			}
 		}
 
@@ -395,7 +402,7 @@ namespace kawa
 			release();
 
 			auto v = new(_storage) T(std::forward<Args>(args)...);
-			_vtable.refresh<T>();
+			_vtable = &lifetime_vtable::get<T>();
 
 			return *v;
 		}
@@ -404,7 +411,7 @@ namespace kawa
 			requires (sizeof(T) <= storage_size)
 		T& unwrap()	noexcept
 		{
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			return *reinterpret_cast<T*>(_storage);
 		}
 
@@ -412,7 +419,7 @@ namespace kawa
 			requires (sizeof(T) <= storage_size)
 		const T& unwrap() const noexcept
 		{
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			return *reinterpret_cast<const T*>(_storage);
 		}
 
@@ -420,7 +427,7 @@ namespace kawa
 			requires (sizeof(T) <= storage_size)
 		T* try_unwrap()	noexcept
 		{
-			if (_vtable.type_info.is<T>())
+			if (_vtable->type_info.is<T>())
 			{
 				return reinterpret_cast<T*>(_storage);
 			}
@@ -434,7 +441,7 @@ namespace kawa
 			requires (sizeof(T) <= storage_size)
 		const T* try_unwrap() const noexcept
 		{
-			if (_vtable.type_info.is<T>())
+			if (_vtable->type_info.is<T>())
 			{
 				return reinterpret_cast<const T*>(_storage);
 			}
@@ -446,13 +453,13 @@ namespace kawa
 
 		template<typename T>
 			requires (sizeof(T) <= storage_size)
-		bool is() noexcept { return _vtable.type_info.is<T>(); }
+		bool is() noexcept { return _vtable->type_info.is<T>(); }
 
-		const lifetime_vtable& vtable() const { return _vtable; }
+		const lifetime_vtable& vtable() const { return *_vtable; }
 
 	private:
 		alignas(std::max_align_t) u8 _storage[storage_size];
-		lifetime_vtable _vtable{};
+		lifetime_vtable* _vtable{};
 	};
 
 	template<typename...variants_t>
@@ -500,11 +507,11 @@ namespace kawa
 			{
 				release();
 				_vtable = other._vtable;
-				if (_vtable.type_info)
+				if (_vtable)
 				{
-					_vtable.move_ctor((void*)other._storage, (void*)_storage);
+					_vtable->move_ctor((void*)other._storage, (void*)_storage);
 				}
-				other._vtable.release();
+				other._vtable = nullptr;
 				other.release();
 			}
 
@@ -523,9 +530,9 @@ namespace kawa
 			{
 				release();
 				_vtable = other._vtable;
-				if (_vtable.type_info)
+				if (_vtable)
 				{
-					_vtable.copy_ctor((void*)other._storage, (void*)_storage);
+					_vtable->copy_ctor((void*)other._storage, (void*)_storage);
 				}
 			}
 
@@ -539,10 +546,10 @@ namespace kawa
 
 		void release() noexcept
 		{
-			if (_vtable.type_info)
+			if (_vtable)
 			{
-				_vtable.dtor(_storage);
-				_vtable.release();
+				_vtable->dtor(_storage);
+				_vtable = nullptr;
 			}
 		}
 
@@ -740,7 +747,7 @@ namespace kawa
 			release();
 
 			auto v = new(_storage) T(std::forward<Args>(args)...);
-			_vtable.refresh<T>();
+			_vtable = &lifetime_vtable::get<T>();
 
 			return *v;
 		}
@@ -749,7 +756,7 @@ namespace kawa
 			requires (any_of<T, variants_t...>)
 		T& unwrap()	noexcept
 		{
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			return *reinterpret_cast<T*>(_storage);
 		}
 
@@ -757,7 +764,7 @@ namespace kawa
 			requires (any_of<T, variants_t...>)
 		const T& unwrap() const noexcept
 		{
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			return *reinterpret_cast<const T*>(_storage);
 		}
 
@@ -765,7 +772,7 @@ namespace kawa
 			requires (any_of<T, variants_t...>)
 		T* try_unwrap()	noexcept
 		{
-			if (_vtable.type_info.is<T>())
+			if (_vtable->type_info.is<T>())
 			{
 				return reinterpret_cast<T*>(_storage);
 			}
@@ -779,7 +786,7 @@ namespace kawa
 			requires (any_of<T, variants_t...>)
 		const T* try_unwrap() const noexcept
 		{
-			if (_vtable.type_info.is<T>())
+			if (_vtable->type_info.is<T>())
 			{
 				return reinterpret_cast<const T*>(_storage);
 			}
@@ -791,13 +798,13 @@ namespace kawa
 
 		template<typename T>
 			requires (any_of<T, variants_t...>)
-		bool is() noexcept { return _vtable.type_info.is<T>(); }
+		bool is() noexcept { return _vtable->type_info.is<T>(); }
 
-		const lifetime_vtable& vtable() const { return _vtable; }
+		const lifetime_vtable& vtable() const noexcept { return *_vtable; }
 
 	private:
 		alignas(std::max_align_t) u8 _storage[union_size<variants_t...>];
-		lifetime_vtable _vtable{};
+		lifetime_vtable* _vtable{};
 
 	};
 
@@ -817,12 +824,12 @@ namespace kawa
 		{
 			if (this != &other)
 			{
-				_vtable.type_info = other._vtable.type_info;
-				if (_vtable.type_info)
+				_vtable->type_info = other._vtable->type_info;
+				if (_vtable->type_info)
 				{
-					_vtable.move_ctor(other._storage, _storage);
+					_vtable->move_ctor(other._storage, _storage);
 				}
-				other._vtable.release();
+				other._vtable = nullptr;
 				other.release();
 			}
 
@@ -839,9 +846,9 @@ namespace kawa
 			if (this != &other)
 			{
 				_vtable = other._vtable;
-				if (_vtable.type_info)
+				if (_vtable->type_info)
 				{
-					_vtable.copy_ctor(other._storage, _storage);
+					_vtable->copy_ctor(other._storage, _storage);
 				}
 			}
 
@@ -881,7 +888,7 @@ namespace kawa
 		{
 			if (_storage)
 			{
-				_vtable.deleter(_storage);
+				_vtable->deleter(_storage);
 				_storage = nullptr;
 			}
 		}
@@ -1080,7 +1087,7 @@ namespace kawa
 
 			auto v = new T(std::forward<Args>(args)...);
 			_storage = v;
-			_vtable.refresh<T>();
+			_vtable = &lifetime_vtable::get<T>();
 
 			return *v;
 		}
@@ -1089,7 +1096,7 @@ namespace kawa
 		T& unwrap()	noexcept
 		{
 			kw_assert(_storage);
-			kw_assert(_vtable.type_info.is<T>());
+			kw_assert(_vtable->type_info.is<T>());
 			return *reinterpret_cast<T*>(_storage);
 		}
 
@@ -1098,7 +1105,7 @@ namespace kawa
 		{
 			kw_assert(_storage);
 
-			if (_vtable.type_info.is<T>())
+			if (_vtable->type_info.is<T>())
 			{
 				return reinterpret_cast<T*>(_storage);
 			}
@@ -1109,11 +1116,11 @@ namespace kawa
 		}
 
 		template<typename T>
-		bool is() const noexcept { return _vtable.type_info.is<T>(); }
+		bool is() const noexcept { return _vtable->type_info.is<T>(); }
 
 	private:
 		void* _storage = nullptr;
-		lifetime_vtable _vtable{};
+		lifetime_vtable* _vtable{};
 	};
 
 }
