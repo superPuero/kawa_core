@@ -9,6 +9,8 @@
 #include <type_traits>
 
 #include "core_types.h"
+#include "utils.h"
+
 
 #if defined(kw_compiler_clang)
 #	define kw_typename_prefix "kawa::_type_name(void) [T = "
@@ -37,23 +39,7 @@ namespace kawa
 			decorated_name.remove_suffix(sizeof(kw_typename_suffix) - 1);				
 
 			return decorated_name;
-		}
-
-		constexpr u64 fnv1a_hash(kawa::string_view str) noexcept
-		{
-			constexpr u64 fnv_offset_basis = 14695981039346656037ull;
-			constexpr u64 fnv_prime = 1099511628211ull;
-
-			u64 hash = fnv_offset_basis;
-
-			for (char c : str)
-			{
-				hash ^= static_cast<u64>(c);
-				hash *= fnv_prime;
-			}
-
-			return hash;
-		}
+		}	
 	}
 
 	template<typename T>
@@ -64,7 +50,7 @@ namespace kawa
 
 	constexpr u64 string_hash(string_view str) noexcept					
 	{
-		return _::fnv1a_hash(str);
+		return fnv1a_hash(str);
 	}
 
 	template<typename T>
@@ -226,7 +212,7 @@ namespace kawa
 		using type = typename std::tuple<F<Types>...>;
 	};
 
-	template<template <typename...> typename F, typename T>
+	template<template <typename> typename F, typename T>
 	using transform_each_t = typename transform_each<F, T>::type;
 
 	template <typename...types>

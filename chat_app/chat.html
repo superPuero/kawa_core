@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>kaw4</title>
+    <link rel="stylesheet" href="chat.css">
+    <script src="script.js"></script>
+</head>
+
+<body onload="refresh_session()">
+    <div id="login_or_register_container" hidden>
+        <button type="button" onclick="document.getElementById('login_form').hidden = false;document.getElementById('register_form').hidden = true">login</button>
+        <button type="button" onclick="document.getElementById('login_form').hidden = true;document.getElementById('register_form').hidden = false">register</button>
+
+        <form id="login_form">
+            <h3>Login</h3>
+
+            <label for="username">Username:</label>
+            <input type="text" id="login_username" name="username" required>
+            <br><br>
+
+            <label for="password">Password:</label>
+            <input type="password" id="login_password" name="password" required>
+
+            <br><br>
+            <p id="login_feedback"></p>
+            <br><br>
+
+            <button type="button" onclick="submit_login()">Log In</button>
+        </form>
+        <form id="register_form" hidden>
+            <h3>Register</h3>
+
+            <label for="username">Username:</label>
+            <input type="text" id="register_username" name="username" required>
+            <br><br>
+
+            <label for="password">Password:</label>
+            <input type="password" id="register_password" name="password" required>
+
+            <br><br>
+            <p id="register_feedback"></p>
+            <br><br>
+
+            <button type="button" onclick="submit_register()">Register</button>
+        </form>
+    </div>
+
+    <div id="chat_container" hidden >
+        <div id="sidebar_container">
+            <h3>Chats</h3>
+            <ul id="chat_list">
+                <li>General</li>
+            </ul>
+            <button id="logout-button"onclick="logout()">logout</button>
+        </div>
+
+        <div id="message_list_container">
+            <ul id="message_list" onload="get_messages()"></ul>
+        </div>
+
+        <div id="input_container">
+            <input type="text" id="message_input" placeholder="Type a message...">
+            <button type="button" onclick="send_message()">Send</button>
+        </div>
+    </div>
+</body>
+</html>

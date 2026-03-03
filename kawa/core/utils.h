@@ -11,6 +11,22 @@
 
 namespace kawa
 {
+    constexpr u64 fnv1a_hash(kawa::string_view str) noexcept
+    {
+        constexpr u64 fnv_offset_basis = 14695981039346656037ull;
+        constexpr u64 fnv_prime = 1099511628211ull;
+
+        u64 hash = fnv_offset_basis;
+
+        for (char c : str)
+        {
+            hash ^= static_cast<u64>(c);
+            hash *= fnv_prime;
+        }
+
+        return hash;
+    }
+
     struct reporting_timer
     {
         reporting_timer(const string& name)
@@ -54,22 +70,6 @@ namespace kawa
             cyan = 46,
             white = 47,
         };
-    };
-
-
-    struct into_any
-    {
-        template<typename T>
-        operator T& () noexcept
-        {
-            return _::fake_object<T>;
-        }
-
-        template<typename T>
-        operator T && () noexcept
-        {
-            return _::fake_object<T>;
-        }
     };
 
     template <usize N>

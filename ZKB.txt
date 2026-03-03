@@ -1,0 +1,5 @@
+Kybernetická bezpeènost Cyber security
+Souhrn právních, organizaèních, technických a vzdìlávacích prostøedkù
+smìøujících k zajištìní ochrany kybernetického prostoru.
+
+ISMS - Systém øízení bezpeènosti informací. Information security management system.

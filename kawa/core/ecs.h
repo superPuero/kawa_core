@@ -1,12 +1,16 @@
 #ifndef KAWA_ECS
 #define KAWA_ECS
 
+#include "utils.h"
+
 #include "core_types.h"
 #include "macros.h"
 #include "fast_map.h"
 #include "task_manager.h"
 #include "stable_tuple.h"
 #include "broadcaster.h"
+
+#include "de_serialize.h"
 
 namespace kawa
 {
@@ -79,12 +83,6 @@ namespace kawa
 
 		entity_id* storage = nullptr;
 		u64 count = 0;
-	};
-
-	enum class query_sync_policy
-	{
-		no_sync,
-		sync
 	};
 
 	struct component_info
@@ -906,19 +904,19 @@ namespace kawa
 			}
 		}
 
-		template<std::invocable<component_info> Fn>
+		template<typename Fn>
 		void query_info_with(const entity_view& view, Fn&& info_func)
 		{
 			if (view.inplace_unary())
 			{
 				entity_id id = view.get_unary();
-				query_info_with({ &id, 1 }, kw_fwd(info_func));
+				query_info_with(entity_view{ &id, 1 }, kw_fwd(info_func));
 			}
 			else
 			{
-				for (auto& s : _storages.values)
+				for (auto e : view)
 				{
-					for (auto e : view)
+					for (auto& s : _storages.values)
 					{
 						if (!s.contains(e)) continue;
 
@@ -928,33 +926,64 @@ namespace kawa
 			}
 		}
 
-		template<typename...Args, typename Fn>
-		void transaction(Fn&& func)
+		template<typename T>
+		struct lock_guard_t
+		{
+			T lock_storages;
+
+			~lock_guard_t()
+			{
+				std::apply([](auto&...v) {((v._mutex->unlock()), ...); }, lock_storages);
+			}
+		};
+
+		template<typename...Args>
+		auto lock_guard()
 		{
 			auto lock_storages = std::tie(_lazy_get_storage<Args>()...);
 
-			std::apply([](auto&...v) {std::lock(*v._mutex...); }, lock_storages);
+			if constexpr (sizeof...(Args) > 1)
+			{
+				std::apply([](auto&...v) {std::lock((*v._mutex)...); }, lock_storages);
+			}
+			else
+			{
+				std::apply([](auto&...v) { ((v._mutex->lock()), ...); }, lock_storages);
+			}
 
-			func();
+			return lock_guard_t{ lock_storages };
+		}
 
+		template<typename...Args>
+		void lock()
+		{
+			auto lock_storages = std::tie(_lazy_get_storage<Args>()...);
+
+			if constexpr (sizeof...(Args) > 1)
+			{
+				std::apply([](auto&...v) {std::lock((*v._mutex)...); }, lock_storages);
+			}
+			else
+			{
+				std::apply([](auto&...v) { ((v._mutex->lock()),...); }, lock_storages);
+			}
+		}
+
+		template<typename...Args>
+		void unlock()
+		{
+			auto lock_storages = std::tie(_lazy_get_storage<Args>()...);
 			std::apply([](auto&...v) {((v.unlock()), ...); }, lock_storages);
 		}
 
 		template<typename Fn>
-		void query_sync(Fn&& func)
-		{
-			query<query_sync_policy::sync>(kw_fwd(func));
-		}
-
-		template<query_sync_policy sync_policy = query_sync_policy::no_sync, typename Fn>
 		void query(Fn&& func)
 		{
 			using q = query_traits<Fn>;
 
 			query_infer<Fn,
 				typename q::dirty_args,
-				typename q::clean_require_args,
-				sync_policy
+				typename q::clean_require_args
 			>(
 				std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
 				std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
@@ -967,7 +996,6 @@ namespace kawa
 			typename Fn,
 			typename dirty_args_tuple,
 			typename require_tuple,
-			query_sync_policy sync_policy,
 			usize...args_idxs,
 			usize...require_idxs
 		>
@@ -982,16 +1010,9 @@ namespace kawa
 				)()...
 			);
 
-			auto lock_storages = std::tie(_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...);
-
 			array<component_storage*, sizeof...(require_idxs)> required_storages = {
 				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
 			};
-
-			if constexpr (sync_policy == query_sync_policy::sync)
-			{
-				std::apply([](auto&...v) {std::lock(*v._mutex...); }, lock_storages);
-			}
 
 			if constexpr (sizeof...(require_idxs))
 			{
@@ -1024,12 +1045,6 @@ namespace kawa
 				query_impl<Fn, 0, args_idxs...>(kw_fwd(func), entity_view{ (entity_id*)_entries._indirect_map, _entries.occupied() }, getters, array<bool*, 0>{});
 			}
 
-
-			if constexpr (sync_policy == query_sync_policy::sync)
-			{
-				// unlock tables
-				std::apply([](auto&...v) {((v.unlock()), ...); }, lock_storages);
-			}
 		}
 
 		template<
@@ -1066,6 +1081,113 @@ namespace kawa
 			}
 		}
 
+		template<typename Fn>
+		void query_until(Fn&& func)
+		{
+			using q = query_traits<Fn>;
+
+			query_until_infer<Fn,
+				typename q::dirty_args,
+				typename q::clean_require_args
+			>(
+				std::make_index_sequence<std::tuple_size_v<typename q::dirty_args>>{},
+				std::make_index_sequence<std::tuple_size_v<typename q::clean_require_args>>{},
+				std::forward<Fn>(func)
+			);
+		}
+
+
+		template<
+			typename Fn,
+			typename dirty_args_tuple,
+			typename require_tuple,
+			usize...args_idxs,
+			usize...require_idxs
+		>
+		void query_until_infer(
+			std::index_sequence<args_idxs...>,
+			std::index_sequence<require_idxs...>,
+			Fn&& func
+		) {
+			auto getters = std::make_tuple(
+				_make_query_param_getter<std::tuple_element_t<args_idxs, dirty_args_tuple>>(
+					*this
+				)()...
+			);
+
+			array<component_storage*, sizeof...(require_idxs)> required_storages = {
+				&_lazy_get_storage<std::tuple_element_t<require_idxs, require_tuple>>()...
+			};
+
+			if constexpr (sizeof...(require_idxs))
+			{
+				usize driver_index = 0;
+
+				for (usize i = 0; i < required_storages.size(); i++)
+				{
+					if (required_storages[i]->_occupied <
+						required_storages[driver_index]->_occupied)
+					{
+						driver_index = i;
+					}
+				}
+
+				component_storage& driver = *required_storages[driver_index];
+
+				required_storages[driver_index] = required_storages[sizeof...(require_idxs) - 1];
+
+				array<bool*, sizeof...(require_idxs) - 1> required_storage_masks;
+
+				for (usize i = 0; i < sizeof...(require_idxs) - 1; i++)
+				{
+					required_storage_masks[i] = required_storages[i]->_mask;
+				}
+
+				query_until_impl<Fn, required_storage_masks.size(), args_idxs...>(kw_fwd(func), entity_view{ (entity_id*)driver._indirect_map, driver.occupied() }, getters, required_storage_masks);
+			}
+			else
+			{
+				query_until_impl<Fn, 0, args_idxs...>(kw_fwd(func), entity_view{ (entity_id*)_entries._indirect_map, _entries.occupied() }, getters, array<bool*, 0>{});
+			}
+
+		}
+
+		template<
+			typename Fn,
+			usize sz,
+			usize...args_idxs
+		>
+		void query_until_impl(
+			Fn&& func,
+			const entity_view& driver_view,
+			auto& getters,
+			const array<bool*, sz>& require_masks
+		)
+		{
+			bool res = false;
+			for (auto i : driver_view)
+			{
+				if constexpr (sz)
+				{
+					if ([&]<usize...I>(std::index_sequence<I...>) {
+						return (... && require_masks[I][i]);
+					}(std::make_index_sequence<sz>{}))
+					{
+						res = func(
+							std::get<args_idxs>(getters).get(i)...
+						);
+					}
+				}
+				else
+				{
+					res = func(
+						std::get<args_idxs>(getters).get(i)...
+					);
+				}
+
+				if (res) break;
+			}
+		}
 
 		template<typename Fn>
 		void query_with(const entity_view& view, Fn&& func)
@@ -1996,6 +2118,14 @@ namespace kawa
 		template<typename T>
 		component_storage& _lazy_get_storage() noexcept
 		{
+			static int init_de_ser = [this]() 
+				{ 
+					ser_map.ensure<T>();
+					deser_map.ensure<T>();
+
+					return 42;
+				}();
+
 			constexpr auto hash = type_hash<T>;
 
 			if (auto v = _storages.try_get(hash))
@@ -2020,9 +2150,103 @@ namespace kawa
 			return _lazy_get_storage<T>().dtor_broadcaster.bcaster.template unwrap<broadcaster<component_destruct_event<T>>>();
 		}
 
+		template<typename T>
+		struct serialize_trait
+		{
+			static void write(registry& reg, entity_id id, std::ofstream& out) {}
+		};
+
+		struct serializer_map
+		{
+			using fn_t = void(registry&, entity_id, std::ofstream&);
+			template<typename T>
+			static inline fn_t* fn = +[](registry& reg, entity_id id, std::ofstream& out)
+				{
+					serialize_trait<T>::write(reg, id, out);
+				};
+
+			template<typename T>
+			void ensure()
+			{
+				serializers[type_hash<T>] = fn<T>;
+			}
+
+			umap<u64, fn_t*> serializers;
+		};
+
+		template<typename T>
+		struct deserialize_trait
+		{
+			static void read(registry& reg, entity_id id, std::ifstream& in) {}
+		};
+
+
+		struct deserializer_map
+		{
+			using fn_t = void(registry&, entity_id, std::ifstream&);
+			template<typename T>
+			static inline fn_t* fn = +[](registry& reg, entity_id id, std::ifstream& in)
+				{
+					deserialize_trait<T>::read(reg, id, in);
+				};
+
+			template<typename T>
+			void ensure()
+			{
+				deserializers[type_hash<T>] = fn<T>;
+			}
+
+			umap<u64, fn_t*> deserializers;
+		};
+
+	
+
+		void serialize(std::ofstream& out)
+		{
+			for (auto e : _entries.as_base())
+			{
+				query_info_with((entity_id)e,
+					[&](component_info info) 
+					{
+						out << info.type_info.hash << '\n';
+						ser_map.serializers[info.type_info.hash](*this, (entity_id)e, out);
+					}
+				);
+
+				out << "#" << '\n';
+			}
+			out << "$" << '\n';
+
+		}
+
+		void deserialize(std::ifstream& in)
+		{
+			in >> std::ws;
+
+			while (in.peek() != '$' && in.peek() != std::char_traits<char>::eof())
+			{
+				auto id = entity();
+				in >> std::ws;
+
+				while (in.peek() != '#' && in.peek() != '$' && in.peek() != std::char_traits<char>::eof())
+				{
+					u64 type_hash;
+					in >> type_hash;
+					deser_map.deserializers[type_hash](*this, id, in);
+					in >> std::ws;
+				}
+				in.ignore();
+				in >> std::ws;
+			}
+
+			in.ignore();
+		}
+
 		hash_map<component_storage> _storages;
 		indirect_array<entity_id> _free_list;
 		indirect_array<entity_id> _entries;
+		serializer_map ser_map;
+		deserializer_map deser_map;
 		u64 _id_counter = 0;
 		config _cfg;
 	};
