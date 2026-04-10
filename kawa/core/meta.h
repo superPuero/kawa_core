@@ -112,7 +112,7 @@ namespace kawa
 			return hash == type_hash<T>;
 		}
 
-		void reset()
+		void release()
 		{
 			*this = type_info();
 		}
@@ -169,6 +169,15 @@ namespace kawa
 	};
 
 	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(*&)(ArgTy...)>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
 	struct function_traits<RetTy(ArgTy...)>
 	{
 		using return_type = RetTy;
@@ -179,6 +188,51 @@ namespace kawa
 
 	template<typename RetTy, typename ObjTy, typename...ArgTy>
 	struct function_traits<RetTy(ObjTy::*)(ArgTy...) const>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(*)(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(*&)(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(&)(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename...ArgTy>
+	struct function_traits<RetTy(ArgTy...) noexcept>
+	{
+		using return_type = RetTy;
+		using args_tuple = typename std::tuple<ArgTy...>;
+		template<usize i>
+		using arg_at = typename std::tuple_element_t<i, args_tuple>;
+	};
+
+	template<typename RetTy, typename ObjTy, typename...ArgTy>
+	struct function_traits<RetTy(ObjTy::*)(ArgTy...) const noexcept>
 	{
 		using return_type = RetTy;
 		using args_tuple = typename std::tuple<ArgTy...>;

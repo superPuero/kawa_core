@@ -1,4 +1,0 @@
-info: foo
-warn: foo
-error: foo
-verbose: foo

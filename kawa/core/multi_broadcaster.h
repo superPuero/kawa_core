@@ -24,7 +24,7 @@ namespace kawa
 			get<message_t>().emit(msg);
 		}
 
-		registry _container{ {.max_entity_count = 1} };
+		registry _container{ {} };
 		entity_id _handle;
 	};
 }

@@ -9,24 +9,53 @@ namespace kawa
 {
 	struct lifetime_vtable
 	{
+		using with_offset_fn_t = void*(void*, usize);
+
 		using deleter_fn_t = void(void*);
 		using dtor_fn_t = void(void*);
+		using dtor_n_fn_t = void(void*, usize);
+
 		using copy_ctor_fn_t = void(void*, void*);
+		using copy_ctor_n_fn_t = void(void*, void*, usize);
+		using copy_assignment_fn_t = void(void*, void*);
+		using copy_assignment_n_fn_t = void(void*, void*,usize);
+
 		using move_ctor_fn_t = void(void*, void*);
+		using move_ctor_n_fn_t = void(void*, void*, usize);
+		using move_assignment_fn_t = void(void*, void*);
+		using move_assignment_n_fn_t = void(void*, void*, usize);
+
+		with_offset_fn_t* with_offset_fn = nullptr;
 
 		deleter_fn_t* deleter_fn = nullptr;
+
 		dtor_fn_t* dtor_fn = nullptr;
+		dtor_n_fn_t* dtor_n_fn = nullptr;
+
 		copy_ctor_fn_t* copy_ctor_fn = nullptr;
+		copy_ctor_n_fn_t* copy_ctor_n_fn = nullptr;
+		copy_assignment_fn_t* copy_assignment_fn = nullptr;
+		copy_assignment_n_fn_t* copy_assignment_n_fn = nullptr;
+
 		move_ctor_fn_t* move_ctor_fn = nullptr;
+		move_ctor_n_fn_t* move_ctor_n_fn = nullptr;
+		move_assignment_fn_t* move_assignment_fn = nullptr;
+		move_assignment_n_fn_t* move_assignment_n_fn = nullptr;
+
+
 		type_info type_info;
 
 		void release()
 		{
-			type_info.reset();
+			type_info.release();
+			with_offset_fn = nullptr;
 			deleter_fn = nullptr;
 			dtor_fn = nullptr;
+			dtor_n_fn = nullptr;
 			copy_ctor_fn = nullptr;
+			copy_ctor_n_fn = nullptr;
 			move_ctor_fn = nullptr;
+			move_ctor_n_fn = nullptr;
 		}
 
 		template<typename T>
@@ -36,12 +65,37 @@ namespace kawa
 			return vtable;
 		}
 
+		bool is_copy_construicable() noexcept
+		{
+			return copy_ctor_fn;
+		}
+
+		bool is_move_construicable() noexcept
+		{
+			return move_ctor_fn;
+		}
+
+		bool is_copy_assignable() noexcept
+		{
+			return copy_assignment_fn;
+		}
+
+		bool is_move_assignable() noexcept
+		{
+			return move_assignment_fn;
+		}
+
 		template<typename T>
 		void refresh()
 		{
 			release();
 
 			type_info.refresh<T>();
+
+			with_offset_fn = +[](void* ptr, usize offset)
+				{
+					return (void*)(static_cast<T*>(ptr) + offset);
+				};
 
 			deleter_fn = +[](void* ptr)
 				{
@@ -53,6 +107,14 @@ namespace kawa
 					reinterpret_cast<T*>(ptr)->~T();
 				};
 
+			dtor_n_fn = +[](void* ptr,  usize n)
+				{
+					for (usize i = 0; i < n; i++)
+					{
+						(reinterpret_cast<T*>(ptr) + i)->~T();
+					}
+				};
+
 			copy_ctor_fn = nullptr;
 
 			if constexpr (std::is_copy_constructible_v<T>)
@@ -60,6 +122,32 @@ namespace kawa
 				copy_ctor_fn = +[](void* from, void* to)
 					{
 						new (to) T(*reinterpret_cast<T*>(from));
+					};
+
+				copy_ctor_n_fn = +[](void* from, void* to, usize n)
+					{
+						for (usize i = 0; i < n; i++)
+						{
+							new (static_cast<T*>(to) + i) T(*(reinterpret_cast<const T*>(from) + i));
+						}
+					};
+			}
+
+			copy_assignment_fn = nullptr;
+
+			if constexpr (std::is_copy_assignable_v<T>)
+			{
+				copy_assignment_fn = +[](void* from, void* to)
+					{
+						*static_cast<T*>(to) = *static_cast<const T*>(from);
+					};
+
+				copy_assignment_n_fn = +[](void* from, void* to, usize n)
+					{
+						for (usize i = 0; i < n; i++)
+						{
+							*(static_cast<T*>(to) + i) = *(static_cast<const T*>(from) + i);
+						}
 					};
 			}
 
@@ -70,6 +158,32 @@ namespace kawa
 				move_ctor_fn = +[](void* from, void* to)
 					{
 						new (to) T(std::move(*reinterpret_cast<T*>(from)));
+					};
+
+				move_ctor_n_fn = +[](void* from, void* to,  usize n)
+					{
+						for (usize i = 0; i < n; i++)
+						{
+							new (static_cast<T*>(to) + i) T(std::move(*(reinterpret_cast<T*>(from) + i)));
+						}
+					};
+			}
+
+			move_assignment_fn = nullptr;
+
+			if constexpr (std::is_move_assignable_v<T>)
+			{
+				move_assignment_fn = +[](void* from, void* to)
+					{
+						*static_cast<T*>(to) = std::move(*static_cast<const T*>(from));
+					};
+
+				move_assignment_n_fn = +[](void* from, void* to, usize n)
+					{
+						for (usize i = 0; i < n; i++)
+						{
+							*(static_cast<T*>(to) + i) = std::move(*(static_cast<const T*>(from) + i));
+						}
 					};
 			}
 		}
@@ -86,9 +200,22 @@ namespace kawa
 			dtor_fn(ptr);
 		}
 
+		void* with_offset(void* ptr, usize off)
+		{
+			kw_assert(type_info);
+			return with_offset_fn(ptr, off);
+		}
+
 		void dtor_offset(void* ptr, usize offset)
 		{
+			kw_assert(type_info && ptr);
 			dtor((u8*)(ptr)+offset * type_info.size);
+		}
+
+		void dtor_n(void* ptr, usize n)
+		{
+			kw_assert(type_info && ptr);
+			dtor_n_fn(ptr, n);
 		}
 
 
@@ -97,6 +224,27 @@ namespace kawa
 			kw_assert(type_info && from && to);
 			kw_assert_msg(copy_ctor_fn, "trying to copy uncopyable type");
 			copy_ctor_fn(from, to);
+		}
+
+		void copy_ctor_n(void* from, void* to, usize n)
+		{
+			kw_assert(type_info && from && to);
+			kw_assert_msg(copy_ctor_fn, "trying to copy uncopyable type");
+			copy_ctor_n_fn(from, to, n);
+		}
+
+		void copy_assignment_n(void* from, void* to, usize n)
+		{
+			kw_assert(type_info && from && to);
+			kw_assert_msg(copy_ctor_fn, "trying to copy uncopyable type");
+			copy_assignment_n_fn(from, to, n);
+		}
+
+		void copy_assignment(void* from, void* to)
+		{
+			kw_assert(type_info && from && to);
+			kw_assert_msg(copy_ctor_fn, "trying to copy uncopyable type");
+			copy_assignment_fn(from, to);
 		}
 
 		void copy_ctor_offset(void* from, usize from_offset, void* to, usize to_offset)
@@ -110,6 +258,28 @@ namespace kawa
 			kw_assert_msg(move_ctor_fn, "trying to move unmovalbe type");
 			move_ctor_fn(from, to);
 		}
+
+		void move_ctor_n(void* from, void* to, usize n)
+		{
+			kw_assert(type_info && from && to);
+			kw_assert_msg(move_ctor_fn, "trying to move unmovalbetype");
+			move_ctor_n_fn(from, to, n);
+		}
+
+		void move_assignment(void* from, void* to)
+		{
+			kw_assert(type_info && from && to);
+			kw_assert_msg(move_ctor_fn, "trying to move unmovalbetype");
+			move_assignment_fn(from, to);
+		}
+
+		void move_assignment_n(void* from, void* to, usize n)
+		{
+			kw_assert(type_info && from && to);
+			kw_assert_msg(move_ctor_fn, "trying to move unmovalbetype");
+			move_assignment_n_fn(from, to, n);
+		}
+
 
 		void move_ctor_offset(void* from, usize from_offset, void* to, usize to_offset)
 		{

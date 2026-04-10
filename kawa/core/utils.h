@@ -37,7 +37,7 @@ namespace kawa
 
         ~reporting_timer()
         {
-            kw_info("{}: {}", _name, std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - _start).count() / 1000.f);
+            kw_info("{}: {}", _name, std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - _start).count() / 1000.0f);
         }
 
         string _name;
